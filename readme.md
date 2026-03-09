@@ -18,6 +18,12 @@ npm run db:studio
 npm run db:generate
 npm run db:migrate
 
+# Express.js Installation 
+npm install express cors helmet morgan bcryptjs jsonwebtoken
+npm install -D @types/express @types/cors @types/morgan @types/bcryptjs @types/jsonwebtoken
+npm install zod uuid
+npm install -D @types/uuid
+
 -----------------------------------------KT-----------------------------------------
 
 # 🎰 Lottery Network Platform — Backend Database
@@ -99,7 +105,7 @@ npm run db:migrate
 This executes the generated SQL against your Supabase database and creates all 34 tables.
 
 ### 5. Seed the database
-
+ 
 ```bash
 npx tsx src/db/seed.ts
 ```

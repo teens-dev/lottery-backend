@@ -6,10 +6,10 @@
   "main": "index.js",
   "scripts": {
     "db:generate": "drizzle-kit generate",
-    "db:migrate":  "drizzle-kit migrate",
-    "db:push":     "drizzle-kit push",
-    "db:studio":   "drizzle-kit studio",
-    "db:drop":     "drizzle-kit drop",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:drop": "drizzle-kit drop",
     "dev": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -18,17 +18,29 @@
   "license": "ISC",
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "crypto": "^1.0.1",
     "dotenv": "^17.3.1",
     "drizzle-orm": "^0.45.1",
     "express": "^5.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.1",
     "nodemon": "^3.1.14",
     "pg": "^8.20.0",
-    "razorpay": "^2.9.6"
+    "razorpay": "^2.9.6",
+    "uuid": "^13.0.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/morgan": "^1.9.10",
     "@types/pg": "^8.18.0",
+    "@types/uuid": "^10.0.0",
     "drizzle-kit": "^0.31.9",
     "tsx": "^4.21.0"
   }
