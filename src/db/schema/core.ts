@@ -78,7 +78,7 @@ export const draws = pgTable('draws', {
   status:          drawStatusEnum('status').notNull().default('draft'),
   drawDate:        timestamp('draw_date').notNull(),
   description:     text('description'),
-  rngSeedHash:     varchar('rng_seed_hash', { length: 64 }),
+  rngSeedHash:     varchar('rng_seed_hash', { length: 124 }),
   isGuaranteed:    boolean('is_guaranteed').notNull().default(true),
   minEntries:      integer('min_entries').default(10),
   createdAt:       timestamp('created_at').defaultNow(),

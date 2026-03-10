@@ -80,7 +80,7 @@ dotenv.config();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ssl: false ,
 });
 
 const db = drizzle(pool, { schema });
@@ -214,7 +214,7 @@ async function seed() {
     status:         'live',
     drawDate:       new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours from now
     description:    'Weekly mega draw with ₹1 Crore prize pool',
-    rngSeedHash:    'a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef12345678',
+    rngSeedHash:    'a1b2c3d4e5f67890123456789012345',
     isGuaranteed:   true,
     minEntries:     100,
   }).returning();
