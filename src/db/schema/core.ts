@@ -25,6 +25,10 @@ export const campaignStatusEnum = pgEnum('campaign_status', [
   'draft', 'scheduled', 'sent', 'failed'
 ]);
 
+export const userRoleEnum = pgEnum('user_role', [
+  'admin', 'user'
+]);
+
 // ── 9. users ──
 export const users = pgTable('users', {
   id:               uuid('id').primaryKey().defaultRandom(),
@@ -35,6 +39,7 @@ export const users = pgTable('users', {
   phone:            varchar('phone', { length: 20 }).notNull().unique(),
   passwordHash:     varchar('password_hash', { length: 255 }).notNull(),
   avatarUrl:        text('avatar_url'),
+  role:             userRoleEnum('role').notNull().default('user'),
   points:           integer('points').notNull().default(0),
   totalPoints:      integer('total_points').notNull().default(0),
   status:           userStatusEnum('status').notNull().default('active'),
@@ -60,6 +65,7 @@ export const admins = pgTable('admins', {
   name:         varchar('name', { length: 200 }).notNull(),
   email:        varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
+  role:             userRoleEnum('role').notNull().default('admin'),
   isActive:     boolean('is_active').notNull().default(true),
   lastLoginAt:  timestamp('last_login_at'),
   createdAt:    timestamp('created_at').defaultNow(),
