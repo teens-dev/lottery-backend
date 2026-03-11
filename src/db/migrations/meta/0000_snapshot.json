@@ -1,5 +1,5 @@
 {
-  "id": "dbc01642-1c55-4cb0-b982-3f606443d0af",
+  "id": "06a2bc9c-18cf-44ad-ab5f-9b62ce991b91",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -598,6 +598,18 @@
         },
         "draw_date": {
           "name": "draw_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "draw_start_date": {
+          "name": "draw_start_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "draw_end_date": {
+          "name": "draw_end_date",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true
