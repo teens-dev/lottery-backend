@@ -231,6 +231,17 @@ async function seed() {
     currency:     'INR',
   }).returning();
 
+
+
+
+
+
+
+
+
+
+
+  
   // 13. referral_codes
   console.log('→ Seeding referral_codes...');
   const [referralCode1] = await db.insert(schema.referralCodes).values({

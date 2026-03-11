@@ -96,6 +96,17 @@ export const draws = pgTable('draws', {
   drawDateIdx: index('draws_date_idx').on(t.drawDate),
 }));
 
+
+
+
+
+
+
+
+
+
+
+
 // ── 12. wallets ──
 export const wallets = pgTable('wallets', {
   id:            uuid('id').primaryKey().defaultRandom(),

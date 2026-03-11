@@ -69,7 +69,15 @@ export const createDraw = async (req: Request, res: Response) => {
       data: newDraw
     });
 
-  } catch (error) {
+  } catch (error)
+  
+  
+  
+  
+  
+  
+  
+  {
 
     console.error(error);
 
