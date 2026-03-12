@@ -2,8 +2,87 @@ import { Request, Response } from "express";
 import { db } from "../../db/db";
 import { draws } from "../../db/schema";
 
+/**
+ * @swagger
+ * /api/create-draw:
+ *   post:
+ *     summary: Create a new draw
+ *     description: Endpoint to create a new lottery draw
+ *     tags:
+ *       - Draws
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - game_type_id
+ *               - created_by
+ *               - name
+ *               - prize_pool
+ *               - ticket_price
+ *               - max_entries
+ *               - status
+ *               - draw_date
+ *               - draw_start_date
+ *               - draw_end_date
+ *               - rng_seed_hash
+ *               - is_guaranteed
+ *               - min_entries
+ *             properties:
+ *               game_type_id:
+ *                 type: integer
+ *               created_by:
+ *                 type: string
+ *                 format: uuid
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               prize_pool:
+ *                 type: number
+ *               ticket_price:
+ *                 type: number
+ *               max_entries:
+ *                 type: integer
+ *               status:
+ *                 type: string
+ *               draw_date:
+ *                 type: string
+ *                 format: date-time
+ *               draw_start_date:
+ *                 type: string
+ *                 format: date-time
+ *               draw_end_date:
+ *                 type: string
+ *                 format: date-time
+ *               rng_seed_hash:
+ *                 type: string
+ *               is_guaranteed:
+ *                 type: boolean
+ *               min_entries:
+ *                 type: integer
+ *     responses:
+ *       201:
+ *         description: Draw created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       400:
+ *         description: Invalid input or date format
+ *       500:
+ *         description: Internal server error
+ */
 export const createDraw = async (req: Request, res: Response) => {
-
   try {
 
     console.log("Request body:", req.body);
