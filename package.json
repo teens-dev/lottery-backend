@@ -2,7 +2,7 @@
   "name": "lottery_backend",
   "version": "1.0.0",
   "type": "module",
-  "description": "",
+  "description": "npm install drizzle-orm pg dotenv\r npm install -D drizzle-kit @types/pg tsx",
   "main": "index.js",
   "scripts": {
     "db:generate": "drizzle-kit generate",
@@ -10,7 +10,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:drop": "drizzle-kit drop",
-    "dev": "nodemon index.js",
+    "dev": "tsx src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -39,6 +39,7 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
+    "@types/node": "^25.4.0",
     "@types/pg": "^8.18.0",
     "@types/uuid": "^10.0.0",
     "drizzle-kit": "^0.31.9",
