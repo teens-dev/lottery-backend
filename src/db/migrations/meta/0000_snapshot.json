@@ -1,5 +1,5 @@
 {
-  "id": "75577e28-94f8-415e-8d82-d38dd36ab59d",
+  "id": "dbc01642-1c55-4cb0-b982-3f606443d0af",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -610,7 +610,7 @@
         },
         "rng_seed_hash": {
           "name": "rng_seed_hash",
-          "type": "varchar(64)",
+          "type": "varchar(124)",
           "primaryKey": false,
           "notNull": false
         },
