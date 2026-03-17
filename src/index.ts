@@ -5,6 +5,7 @@ import paymentRoutes from "./api/routes/payment.routes";
 import swaggerUi from "swagger-ui-express";
 import swaggerJsdoc from "swagger-jsdoc";
 import authRoutes from "./api/routes/auth.routes"
+import adminRoutes from "./api/routes/admin.routes";
 
 const app = express();
 
@@ -40,10 +41,11 @@ app.get("/test", (req, res) => {
   res.send("Server is working");
 });
 app.use("/api/auth", authRoutes);
+app.use("/api/admin",adminRoutes)
 app.use("/api", drawRoutes);
 app.use("/api/payments", paymentRoutes);
 
-const PORT = 10000;
+const PORT = 5000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

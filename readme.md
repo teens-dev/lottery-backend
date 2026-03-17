@@ -120,6 +120,44 @@ npm run db:studio
 
 Opens a visual browser at `https://local.drizzle.studio` to inspect your tables.
 
+### 7. API Documentation (Swagger)
+
+The project includes interactive API documentation powered by Swagger UI and `swagger-jsdoc`.
+1. Start the development server by running `npm run dev`
+2. Open your browser and navigate to `http://localhost:10000/api-docs`
+
+#### How to Document New APIs
+
+You can document new API endpoints without creating separate YAML files. Simply add a JSDoc comment block with the `@swagger` tag directly above your controller functions or route definitions. The configuration will automatically gather all these comments to build the UI.
+
+**Example of documenting a basic GET endpoint:**
+
+```typescript
+/**
+ * @swagger
+ * /api/test:
+ *   get:
+ *     summary: Test the server
+ *     description: Returns a simple success message to verify the server is running
+ *     tags:
+ *       - General
+ *     responses:
+ *       200:
+ *         description: Server is working
+ */
+app.get("/test", (req, res) => {
+  res.send("Server is working");
+});
+```
+
+**Key properties to include in your definitions:**
+- `summary`: A short title for the endpoint.
+- `tags`: Group similar endpoints together (e.g., `[Draws]`, `[Users]`).
+- `requestBody`: If it's a POST/PUT request, define the JSON schema of what the client should send.
+- `responses`: Always define at least the success response (200/201) and common error responses (400/500).
+
+For a comprehensive example of documenting request bodies and nested JSON responses, check out the `createDraw` function in `src/api/controllers/draw.controller.ts`.
+
 ---
 
 ## 📦 Package.json Scripts
@@ -1042,3 +1080,5 @@ npm run db:migrate
 
 # Step 5 — Seed
 npx tsx src/db/seed.ts
+
+JWT_SECRET=bfe975632e31d7748a1fc3626fc26b5151f9b5791f01ebaa06b6e6dc33041d974c5660302c395546aab85980a611653d14f30297fbe60c2162d004d718bec23c
