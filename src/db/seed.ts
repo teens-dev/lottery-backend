@@ -213,10 +213,8 @@ async function seed() {
     currentEntries: 3241,
     status:         'live',
     drawDate:       new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours from now
-    drawstartDate: new Date("2026-03-20T20:00:00"),
-    drawendDate:  new Date("2026-03-20T21:00:00"),
     description:    'Weekly mega draw with ₹1 Crore prize pool',
-    rngSeedHash:    'a1b2c3d4e5f67890123456789012345',
+    rngSeedHash:    'a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef12345678',
     isGuaranteed:   true,
     minEntries:     100,
   }).returning();
@@ -229,7 +227,8 @@ async function seed() {
     bonusBalance: '500.00',
     lockedAmount: '0.00',
     currency:     'INR',
-  }).returning();  
+  }).returning();
+
   // 13. referral_codes
   console.log('→ Seeding referral_codes...');
   const [referralCode1] = await db.insert(schema.referralCodes).values({

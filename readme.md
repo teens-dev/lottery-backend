@@ -1080,3 +1080,5 @@ npm run db:migrate
 
 # Step 5 — Seed
 npx tsx src/db/seed.ts
+
+JWT_SECRET=bfe975632e31d7748a1fc3626fc26b5151f9b5791f01ebaa06b6e6dc33041d974c5660302c395546aab85980a611653d14f30297fbe60c2162d004d718bec23c
