@@ -4,7 +4,8 @@ import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
 
 import { db } from "../../db";
-import { admins, adminRoles } from "../../db/schema/admin.schema";
+import { admins } from "../../db/schema/core";
+import { adminRoles } from "../../db/schema";
 import {
   adminLoginSchema,
   createAdminRoleSchema,
@@ -60,6 +61,11 @@ export const createAdminRole = async (req: Request, res: Response) => {
   }
 };
 
+
+
+
+
+
 export const createAdmin = async (req: Request, res: Response) => {
   try {
     const validated = createAdminSchema.safeParse(req.body);
@@ -98,6 +104,12 @@ export const createAdmin = async (req: Request, res: Response) => {
       });
     }
 
+
+
+
+
+
+    
     const passwordHash = await bcrypt.hash(password, 10);
 
     const newAdmin = await db

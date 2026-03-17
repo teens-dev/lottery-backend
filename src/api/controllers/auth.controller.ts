@@ -5,6 +5,14 @@ import { db } from "../../db";
 import { users } from "../../db/schema";
 import { eq } from "drizzle-orm";
 
+
+
+
+
+
+
+
+
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
 const JWT_OPTIONS: SignOptions = {

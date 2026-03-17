@@ -17,6 +17,10 @@ router.post("/create", createAdmin);
 // login route
 router.post("/login", adminLogin);
 
+
+
+
+
 // protected route
 router.get("/me", protect, adminOnly, getAdminProfile);
 
