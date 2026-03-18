@@ -35,10 +35,6 @@ app.use(cors({
 
 app.use(express.json());
 
-app.get("/test", (req, res) => {
-  res.send("Server is working");
-});
-
 app.use("/api", drawRoutes);
 app.use("/api/payments", paymentRoutes);
 
