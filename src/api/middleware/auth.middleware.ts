@@ -5,6 +5,16 @@ export interface AuthRequest extends Request {
   user?: any;
 }
 
+
+
+
+
+
+
+
+
+
+
 export const protect = (
   req: AuthRequest,
   res: Response,

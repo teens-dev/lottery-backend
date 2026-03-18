@@ -10,6 +10,23 @@ export const createAdminRoleSchema = z.object({
   permissions: z.array(z.string()).default([]),
 });
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export const createAdminSchema = z.object({
   roleId: z.number().int().positive("Valid roleId is required"),
   name: z.string().min(2, "Name is required"),

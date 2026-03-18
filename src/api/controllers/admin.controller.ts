@@ -4,7 +4,14 @@ import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
 
 import { db } from "../../db";
-import { admins, adminRoles } from "../../db/schema/admin.schema";
+import { admins } from "../../db/schema/core";
+import { adminRoles } from "../../db/schema";
+
+
+
+
+
+
 import {
   adminLoginSchema,
   createAdminRoleSchema,
@@ -30,6 +37,12 @@ export const createAdminRole = async (req: Request, res: Response) => {
       .select()
       .from(adminRoles)
       .where(eq(adminRoles.name, name));
+
+
+
+
+
+
 
     if (existingRole.length > 0) {
       return res.status(409).json({

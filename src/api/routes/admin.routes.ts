@@ -8,6 +8,15 @@ import {
 import { protect } from "../middleware/auth.middleware";
 import { adminOnly } from "../middleware/admin.middleware";
 
+
+
+
+
+
+
+
+
+
 const router = Router();
 
 // create routes for Postman
