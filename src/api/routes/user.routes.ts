@@ -1,7 +1,14 @@
 import { Router } from "express";
-import { getUsers } from "../controllers/user.controller";
+import { getUsersWithCount } from "../controllers/user.controller";
 
 const router = Router();
+
+
+
+
+router.get("/", getUsersWithCount);
+import { getUsers } from "../controllers/user.controller";
+
 
 router.get("/users", getUsers);
 
