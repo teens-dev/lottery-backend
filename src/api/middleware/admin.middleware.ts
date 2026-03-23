@@ -13,7 +13,10 @@ export const adminOnly = (
     });
   }
 
-  if (req.user.role !== "admin") {
+  const role = String(req.user.role || "").toLowerCase();
+
+  // ✅ Allow any admin-type role
+  if (!role.includes("admin")) {
     return res.status(403).json({
       success: false,
       message: "Access denied. Admins only",
@@ -22,13 +25,3 @@ export const adminOnly = (
 
   next();
 };
-
-
-
-
-
-
-
-
-
-

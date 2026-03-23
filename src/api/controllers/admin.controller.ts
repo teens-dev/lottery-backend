@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
 
-import { db } from "../../db";
+import { db } from "../../db/db";
 import { admins } from "../../db/schema/core";
 import { adminRoles } from "../../db/schema";
 

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { db } from "../../db/index";
+import { db } from "../../db/db";
 import { draws, gameTypes } from "../../db/schema";
 import { eq, desc, SQL } from "drizzle-orm";
 import { drawStatusEnum } from "../../db/schema";

@@ -1,7 +1,7 @@
 import type { Request as ExpressRequest, Response as ExpressResponse } from "express";
 import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
-import { db } from "../../db";
+import { db } from "../../db/db";
 import { users } from "../../db/schema";
 import { eq } from "drizzle-orm";
 
