@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import drawRoutes from "./api/routes/draw.routes";
 import paymentRoutes from "./api/routes/payment.routes";
+import categoryRoutes from "./api/routes/category.routes";
 import swaggerUi from "swagger-ui-express";
 import swaggerJsdoc from "swagger-jsdoc";
 
@@ -12,7 +13,7 @@ const swaggerOptions = {
     openapi: '3.0.0',
     info: {
       title: 'Lottery Backend API',
-      version: '1.0.0',
+      version: '1.0.0',   
       description: 'API Documentation for the Lottery Backend',
     },
     servers: [
@@ -41,6 +42,7 @@ app.get("/test", (req, res) => {
 app.use("/api", userRoutes);
 app.use("/api", drawRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/categories", categoryRoutes);
 
 const PORT = 10000;
 

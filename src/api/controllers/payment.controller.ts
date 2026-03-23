@@ -117,27 +117,35 @@ export const verifyRazorpayPayment = async (req: Request, res: Response) => {
     try {
       // Atomic Transaction for Success (Update Txn + Create Ticket)
       await db.transaction(async (tx) => {
+        const tNums = Array.isArray(ticketNumber) ? ticketNumber : String(ticketNumber).split(',');
+        const pNums = Array.isArray(pickedNumbers) ? pickedNumbers : (pickedNumbers ? String(pickedNumbers).split(',') : []);
+
+        const numBoxes = tNums.length;
+        const boxesStr = tNums.join(',');
+
         // Update transaction to success
         await tx.update(transactions)
           .set({
             status: "success",
             gatewayTxnId: razorpay_payment_id,
-            note: "Payment Success - Ticket Issued"
+            note: `Payment Success - ${numBoxes} boxes booked: ${boxesStr}`
           })
           .where(eq(transactions.txnRef, razorpay_order_id));
 
-        // Create the ticket record
-        await tx.insert(tickets).values({
+        // Create the ticket records
+        const ticketValues = tNums.map((num: string, index: number) => ({
           userId: userId,
           drawId: drawId,
-          ticketNumber: ticketNumber,
-          pricePaid: amount.toString(),
-          pickedNumbers: pickedNumbers,
-          status: "active",
-        });
+          ticketNumber: num.trim(),
+          pricePaid: (Number(amount) / numBoxes).toString(),
+          pickedNumbers: pNums[index] || null,
+          status: "active" as const,
+        }));
+
+        await tx.insert(tickets).values(ticketValues);
       });
       console.log("Payment and ticket successfully recorded in DB.");
-      res.status(200).json({ message: "Payment Success & Ticket Created" });
+      res.status(200).json({ message: "Payment Success & Tickets Created" });
     } catch (txnError: any) {
       console.error("Database Transaction Error (verify):", txnError.message);
       res.status(500).json({ error: "Database error during payment verification" });

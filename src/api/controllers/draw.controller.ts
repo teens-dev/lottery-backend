@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../db/index";
-import { draws, gameTypes } from "../../db/schema";
+import { draws, gameTypes, tickets } from "../../db/schema";
 import { eq, desc, SQL } from "drizzle-orm";
 import { drawStatusEnum } from "../../db/schema";
 
@@ -301,5 +301,26 @@ export const getAllDraws = async (req: Request, res: Response) => {
       message: "Internal server error while fetching draws",
       error: process.env.NODE_ENV === "development" ? (error as Error).message : undefined
     });
+  }
+};
+
+export const getDrawTickets = async (req: Request, res: Response) => {
+  try {
+    const drawId = req.params.id as string;
+    const allTickets = await db.select({
+      ticketNumber: tickets.ticketNumber,
+      pickedNumbers: tickets.pickedNumbers,
+    }).from(tickets).where(eq(tickets.drawId, drawId));
+
+    const bookedBoxes = allTickets.map(t => t.ticketNumber);
+
+    res.status(200).json({
+      success: true,
+      data: bookedBoxes,
+      pickedNumbers: allTickets.map(t => t.pickedNumbers).filter(Boolean)
+    });
+  } catch (error) {
+    console.error("Error fetching tickets:", error);
+    res.status(500).json({ success: false, message: "Error fetching tickets" });
   }
 };
