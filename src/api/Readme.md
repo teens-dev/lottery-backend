@@ -6,7 +6,6 @@
 ---
 
 ## 📁 Complete Folder Structure
-
 ```
 backend/
 ├── src/
@@ -123,7 +122,7 @@ New-Item -ItemType Directory -Force -Path src/api/routes, src/api/controllers, s
 
 **Why:** Organizes code by responsibility — routes only define URLs, controllers only contain logic, middleware only intercepts requests. This is the industry-standard MVC-style structure.
 
----
+--- 
 
 ### Step 6 — Create All Files (Windows PowerShell)
 
