@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { db } from "../../db";
+import { db } from "../../db/db";
 import { users } from "../../db/schema";
 
 export const getUsers = async (req: Request, res: Response) => {

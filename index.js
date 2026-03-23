@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import userRoutes from "./src/api/routes/user.routes.ts";
+import adminRoutes from "./api/routes/admin.routes";
+
 
 const app = express();
 
@@ -9,6 +11,7 @@ app.use(express.json());
 
 // connect routes
 app.use("/api", userRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "Server running ✅" });

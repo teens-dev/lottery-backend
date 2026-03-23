@@ -1,12 +1,19 @@
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
+import dotenv from "dotenv";
+
 import drawRoutes from "./api/routes/draw.routes";
 import paymentRoutes from "./api/routes/payment.routes";
-import swaggerUi from "swagger-ui-express";
-import swaggerJsdoc from "swagger-jsdoc";
+import authRoutes from "./api/routes/auth.routes";
+import userRoutes from "./api/routes/user.routes";
+import adminRoutes from "./api/routes/admin.route";
+
+dotenv.config();
 
 const app = express();
 
+// ✅ CORS (important for cookies)
 const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
@@ -33,17 +40,26 @@ app.use(cors({
   origin: ['http://localhost:3000', 'http://localhost:10000', 'http://127.0.0.1:10000']
 }));
 
+// ✅ Middlewares
 app.use(express.json());
+app.use(cookieParser());
 
-app.get("/test", (req, res) => {
-  res.send("Server is working");
+// ✅ Test route (optional but useful)
+app.get("/", (req, res) => {
+  res.send("API is running 🚀");
 });
+
+// ✅ Routes
 app.use("/api", userRoutes);
 app.use("/api", drawRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 
-const PORT = 10000;
+// ✅ Port setup
+const PORT = process.env.PORT || 5000;
 
+// ✅ Start server
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });

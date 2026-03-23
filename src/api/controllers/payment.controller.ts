@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { db } from "../../db";
+import { db } from "../../db/db";
 import { transactions, wallets, tickets } from "../../db/schema";
 import { sql, eq, and } from "drizzle-orm";
 import Razorpay from "razorpay";
