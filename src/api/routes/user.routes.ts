@@ -3,6 +3,8 @@ import { getUsersWithCount } from "../controllers/user.controller";
 
 const router = Router();
 
+
+
 // ✅ ONLY ONE API
 router.get("/", getUsersWithCount);
 
