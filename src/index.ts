@@ -5,6 +5,7 @@ import paymentRoutes from "./api/routes/payment.routes";
 import swaggerUi from "swagger-ui-express";
 import swaggerJsdoc from "swagger-jsdoc";
 import walletRoutes from "./api/routes/wallet.routes";
+import userRoutes from "./api/routes/user.routes";
 
 const app = express();
 
