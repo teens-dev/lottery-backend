@@ -1,9 +1,16 @@
 import { Router } from "express";
-import { createDraw } from "../controllers/draw.controller";
-
+import { createDraw, getAllDraws } from "../controllers/draw.controller";
 
 const router = Router();
 
-router.post("/create-draw", createDraw);
+/**
+ * @swagger
+ * tags:
+ *   name: Draws
+ *   description: Lottery draw management
+ */
 
-export default router;
+router.post("/create-draw", createDraw);
+router.get("/draws", getAllDraws);
+
+export default router;
