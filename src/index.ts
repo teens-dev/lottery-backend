@@ -39,7 +39,7 @@ app.use(express.json());
 app.get("/test", (req, res) => {
   res.send("Server is working");
 });
-
+app.use("/api", userRoutes);
 app.use("/api", drawRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/wallet", walletRoutes);

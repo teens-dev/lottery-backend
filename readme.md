@@ -1080,3 +1080,12 @@ npm run db:migrate
 
 # Step 5 — Seed
 npx tsx src/db/seed.ts
+
+# backend/.env
+DATABASE_URL="postgresql://postgres:9803@localhost:5432/lottery-backend"
+
+#DATABASE_URL="postgresql://postgres:password@localhost:5432/dtabase_name"
+NODE_ENV="development"
+
+RAZORPAY_KEY_ID="rzp_test_SRrKIfsKje5uNq"
+RAZORPAY_KEY_SECRET="KfntU4VVvNMAX64AvdhClFNd"

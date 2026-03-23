@@ -1,5 +1,9 @@
 import { Router } from "express";
-import { getPaymentStats } from "../controllers/payment.controller";
+import { 
+  getPaymentStats, 
+  createRazorpayOrder, 
+  verifyRazorpayPayment 
+} from "../controllers/payment.controller";
 
 /**
  * Router: Payment Routes
@@ -15,13 +19,24 @@ const router = Router();
  * @swagger
  * tags:
  *   name: Payments
- *   description: Payment management and statistics for the admin dashboard
+ *   description: Payment management and statistics
  */
 
 /**
  * GET /api/payments/stats
- * Returns the high-level financial summary shown in the "Payments" tab headers.
  */
 router.get("/stats", getPaymentStats);
+
+/**
+ * POST /api/payments/create-order
+ * Initiates a Razorpay payment order.
+ */
+router.post("/create-order", createRazorpayOrder);
+
+/**
+ * POST /api/payments/verify
+ * Verifies the Razorpay payment signature and logs the transaction.
+ */
+router.post("/verify", verifyRazorpayPayment);
 
 export default router;
