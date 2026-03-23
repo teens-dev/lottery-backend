@@ -5,7 +5,11 @@ const router = Router();
 
 
 
-// ✅ ONLY ONE API
+
 router.get("/", getUsersWithCount);
+import { getUsers } from "../controllers/user.controller";
+
+
+router.get("/users", getUsers);
 
 export default router;

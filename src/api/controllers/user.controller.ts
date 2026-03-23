@@ -26,6 +26,21 @@ export const getUsersWithCount = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: error.message,
+export const getUsers = async (req: Request, res: Response) => {
+  try {
+    const result = await db.select().from(users);
+   
+
+    res.json({
+      success: true,
+      data: result
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      message: "Server Error"
     });
   }
 };
