@@ -4,6 +4,8 @@ import drawRoutes from "./api/routes/draw.routes";
 import paymentRoutes from "./api/routes/payment.routes";
 import swaggerUi from "swagger-ui-express";
 import swaggerJsdoc from "swagger-jsdoc";
+import walletRoutes from "./api/routes/wallet.routes";
+import userRoutes from "./api/routes/user.routes";
 
 const app = express();
 
@@ -41,6 +43,7 @@ app.get("/test", (req, res) => {
 app.use("/api", userRoutes);
 app.use("/api", drawRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/wallet", walletRoutes);
 
 const PORT = 10000;
 
