@@ -1089,3 +1089,9 @@ NODE_ENV="development"
 
 RAZORPAY_KEY_ID="rzp_test_SRrKIfsKje5uNq"
 RAZORPAY_KEY_SECRET="KfntU4VVvNMAX64AvdhClFNd"
+
+
+
+
+
+-- Remove manual adjustment type 
