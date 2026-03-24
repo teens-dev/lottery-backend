@@ -1,4 +1,3 @@
-
 import { Router } from "express";
 import {
   getWalletBalance,
@@ -24,33 +23,35 @@ const router = Router();
  *     summary: Get wallet balance
  *     tags: [Wallet]
  *     parameters:
- *       - in: header
- *         name: userid
+ *       - in: query
+ *         name: userId
+ *         required: false
  *         schema:
  *           type: string
- *         required: true
- *         description: User ID
- *         example: f6d0c61e-1882-4264-8e7a-36736a994300
+ *         example: a9824974-b278-4c38-a383-188622ddf7a9
+ *         description: Pass userId for testing (optional if JWT used)
  *     responses:
  *       200:
  *         description: Wallet balance fetched successfully
+ *       401:
+ *         description: Unauthorized
  */
 router.get("/balance", authMiddleware, getWalletBalance);
 
-/**F
+
+/**
  * @swagger
  * /api/wallet/deposit:
  *   post:
  *     summary: Deposit money to wallet
  *     tags: [Wallet]
  *     parameters:
- *       - in: header
- *         name: userid
+ *       - in: query
+ *         name: userId
+ *         required: false
  *         schema:
  *           type: string
- *         required: true
- *         description: User ID
- *         example: f6d0c61e-1882-4264-8e7a-36736a994300
+ *         example: a9824974-b278-4c38-a383-188622ddf7a9
  *     requestBody:
  *       required: true
  *       content:
@@ -67,8 +68,11 @@ router.get("/balance", authMiddleware, getWalletBalance);
  *     responses:
  *       200:
  *         description: Deposit successful
+ *       401:
+ *         description: Unauthorized
  */
 router.post("/deposit", authMiddleware, depositWallet);
+
 
 /**
  * @swagger
@@ -77,18 +81,20 @@ router.post("/deposit", authMiddleware, depositWallet);
  *     summary: Get wallet transaction history
  *     tags: [Wallet]
  *     parameters:
- *       - in: header
- *         name: userid
+ *       - in: query
+ *         name: userId
+ *         required: false
  *         schema:
  *           type: string
- *         required: true
- *         description: User ID
- *         example: f6d0c61e-1882-4264-8e7a-36736a994300
+ *         example: a9824974-b278-4c38-a383-188622ddf7a9
  *     responses:
  *       200:
  *         description: Wallet transactions list
+ *       401:
+ *         description: Unauthorized
  */
 router.get("/transactions", authMiddleware, getTransactions);
+
 
 /**
  * @swagger
@@ -97,13 +103,12 @@ router.get("/transactions", authMiddleware, getTransactions);
  *     summary: Pay ticket using wallet
  *     tags: [Wallet]
  *     parameters:
- *       - in: header
- *         name: userid
+ *       - in: query
+ *         name: userId
+ *         required: false
  *         schema:
  *           type: string
- *         required: true
- *         description: User ID
- *         example: f6d0c61e-1882-4264-8e7a-36736a994300
+ *         example: a9824974-b278-4c38-a383-188622ddf7a9
  *     requestBody:
  *       required: true
  *       content:
@@ -117,8 +122,9 @@ router.get("/transactions", authMiddleware, getTransactions);
  *     responses:
  *       200:
  *         description: Ticket purchased successfully
+ *       401:
+ *         description: Unauthorized
  */
 router.post("/pay-ticket", authMiddleware, payTicket);
 
 export default router;
-

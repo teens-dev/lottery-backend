@@ -17,12 +17,14 @@ interface AuthRequest extends Request {
 export const getWalletBalance = async (req: AuthRequest, res: Response) => {
   try {
 
-    const userId = req.user?.id || (req.headers["userid"] as string);
+    const userId = req.user?.id;
+
+    console.log("👉 Fetching Wallet for User:", userId); // 🔥 DEBUG
 
     if (!userId) {
       return res.status(401).json({
         success: false,
-        message: "User ID required"
+        message: "Authentication required"
       });
     }
 
@@ -30,18 +32,17 @@ export const getWalletBalance = async (req: AuthRequest, res: Response) => {
       where: eq(wallets.userId, userId)
     });
 
+    // create wallet if not exists
     if (!wallet) {
+      console.log("⚠️ Wallet not found → creating new wallet");
 
-      const newWallet = await db
-        .insert(wallets)
-        .values({
-          id: uuidv4(),
-          userId,
-          balance: "0",
-          bonusBalance: "0",
-          currency: "INR"
-        })
-        .returning();
+      const newWallet = await db.insert(wallets).values({
+        id: uuidv4(),
+        userId,
+        balance: "0",
+        bonusBalance: "0",
+        currency: "INR"
+      }).returning();
 
       wallet = newWallet[0];
     }
@@ -55,7 +56,7 @@ export const getWalletBalance = async (req: AuthRequest, res: Response) => {
     });
 
   } catch (error) {
-    console.error("Wallet Balance Error:", error);
+    console.error("❌ Wallet Balance Error:", error);
 
     return res.status(500).json({
       success: false,
@@ -72,13 +73,15 @@ export const getWalletBalance = async (req: AuthRequest, res: Response) => {
 export const depositWallet = async (req: AuthRequest, res: Response) => {
   try {
 
-    const userId = req.user?.id || (req.headers["userid"] as string);
+    const userId = req.user?.id;
     const { amount, method_id } = req.body;
+
+    console.log("👉 Deposit for User:", userId, "Amount:", amount);
 
     if (!userId) {
       return res.status(401).json({
         success: false,
-        message: "User ID required"
+        message: "Authentication required"
       });
     }
 
@@ -87,30 +90,33 @@ export const depositWallet = async (req: AuthRequest, res: Response) => {
     if (!depositAmount || depositAmount <= 0) {
       return res.status(400).json({
         success: false,
-        message: "Valid amount is required"
+        message: "Invalid amount"
       });
     }
 
-    const wallet = await db.query.wallets.findFirst({
+    let wallet = await db.query.wallets.findFirst({
       where: eq(wallets.userId, userId)
     });
 
+    // auto create wallet if missing
     if (!wallet) {
-      return res.status(404).json({
-        success: false,
-        message: "Wallet not found"
-      });
+      const newWallet = await db.insert(wallets).values({
+        id: uuidv4(),
+        userId,
+        balance: "0",
+        bonusBalance: "0",
+        currency: "INR"
+      }).returning();
+
+      wallet = newWallet[0];
     }
 
     const newBalance = Number(wallet.balance) + depositAmount;
 
     await db.transaction(async (tx) => {
 
-      await tx
-        .update(wallets)
-        .set({
-          balance: newBalance.toString()
-        })
+      await tx.update(wallets)
+        .set({ balance: newBalance.toString() })
         .where(eq(wallets.userId, userId));
 
       await tx.insert(transactions).values({
@@ -136,7 +142,7 @@ export const depositWallet = async (req: AuthRequest, res: Response) => {
     });
 
   } catch (error) {
-    console.error("Deposit Error:", error);
+    console.error("❌ Deposit Error:", error);
 
     return res.status(500).json({
       success: false,
@@ -153,12 +159,14 @@ export const depositWallet = async (req: AuthRequest, res: Response) => {
 export const getTransactions = async (req: AuthRequest, res: Response) => {
   try {
 
-    const userId = req.user?.id || (req.headers["userid"] as string);
+    const userId = req.user?.id;
+
+    console.log("👉 Fetch Transactions for:", userId);
 
     if (!userId) {
       return res.status(401).json({
         success: false,
-        message: "User ID required"
+        message: "Authentication required"
       });
     }
 
@@ -174,7 +182,7 @@ export const getTransactions = async (req: AuthRequest, res: Response) => {
     });
 
   } catch (error) {
-    console.error("Transaction Error:", error);
+    console.error("❌ Transaction Error:", error);
 
     return res.status(500).json({
       success: false,
@@ -191,13 +199,15 @@ export const getTransactions = async (req: AuthRequest, res: Response) => {
 export const payTicket = async (req: AuthRequest, res: Response) => {
   try {
 
-    const userId = req.user?.id || (req.headers["userid"] as string);
+    const userId = req.user?.id;
     const { amount } = req.body;
+
+    console.log("👉 Ticket Payment User:", userId, "Amount:", amount);
 
     if (!userId) {
       return res.status(401).json({
         success: false,
-        message: "User ID required"
+        message: "Authentication required"
       });
     }
 
@@ -206,7 +216,7 @@ export const payTicket = async (req: AuthRequest, res: Response) => {
     if (!ticketAmount || ticketAmount <= 0) {
       return res.status(400).json({
         success: false,
-        message: "Valid amount is required"
+        message: "Invalid amount"
       });
     }
 
@@ -232,11 +242,8 @@ export const payTicket = async (req: AuthRequest, res: Response) => {
 
     await db.transaction(async (tx) => {
 
-      await tx
-        .update(wallets)
-        .set({
-          balance: newBalance.toString()
-        })
+      await tx.update(wallets)
+        .set({ balance: newBalance.toString() })
         .where(eq(wallets.userId, userId));
 
       await tx.insert(transactions).values({
@@ -261,7 +268,7 @@ export const payTicket = async (req: AuthRequest, res: Response) => {
     });
 
   } catch (error) {
-    console.error("Ticket Payment Error:", error);
+    console.error("❌ Ticket Payment Error:", error);
 
     return res.status(500).json({
       success: false,
