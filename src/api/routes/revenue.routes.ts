@@ -1,10 +1,8 @@
 import { Router } from "express";
-import { getTotalRevenue } from "../controllers/revenue.controller.ts";
+import { getTotalRevenue } from "../controllers/revenue.controller";
+
 const router = Router();
 
-// Revenue API
-router.get("/revenue", getTotalRevenue);
-
-
+router.get("/", getTotalRevenue);
 
 export default router;

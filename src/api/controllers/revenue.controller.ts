@@ -1,9 +1,7 @@
-import express from "express";
 import type { Request, Response } from "express";
-import { db } from "../../db/index.ts";
-import { transactions } from "../../db/schema/index.ts";
+import { db } from "../../db/index";
+import { transactions } from "../../db/schema/index";
 import { sql } from "drizzle-orm";
-
 
 
 
