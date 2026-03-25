@@ -3,8 +3,6 @@ import { db } from "../../db/index";
 import { transactions } from "../../db/schema/index";
 import { sql } from "drizzle-orm";
 
-
-
 export const getTotalRevenue = async (req: Request, res: Response) => {
   try {
     const [result] = await db
