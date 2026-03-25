@@ -108,12 +108,22 @@ async function seed() {
 
   // 2. game_types
   console.log('→ Seeding game_types...');
-  const [gameType1] = await db.insert(schema.gameTypes).values({
-    name:        'Mega Millions',
-    description: 'Large jackpot draws with massive prize pools',
-    icon:        '🎰',
-    isActive:    true,
-  }).returning();
+  const [gameType1, gameTypeLevel] = await db.insert(schema.gameTypes).values([
+    {
+      name:        'Mega Millions',
+      description: 'Large jackpot draws with massive prize pools',
+      icon:        '🎰',
+      isActive:    true,
+      type:        'lottery',
+    },
+    {
+      name:        'Level Up Game',
+      description: 'Progress through levels as pools fill up',
+      icon:        '📈',
+      isActive:    true,
+      type:        'level',
+    }
+  ]).returning();
 
   // 3. payment_methods
   console.log('→ Seeding payment_methods...');
@@ -528,16 +538,46 @@ async function seed() {
     paidAt:        new Date(),
   });
 
+  // 35. level_pools
+  console.log('→ Seeding level_pools...');
+  const [levelPool1] = await db.insert(schema.levelPools).values({
+    gameTypeId:    gameTypeLevel.id,
+    level:         1,
+    requiredCount: 4,
+    currentCount:  1,
+    status:        'filling',
+  }).returning();
+
+  // 36. level_entries
+  console.log('→ Seeding level_entries...');
+  await db.insert(schema.levelEntries).values({
+    userId:     user1.id,
+    gameTypeId: gameTypeLevel.id,
+    poolId:     levelPool1.id,
+    level:      1,
+    amountPaid: '100.00',
+    status:     'active',
+  });
+
+  // 37. withdrawals
+  console.log('→ Seeding withdrawals...');
+  await db.insert(schema.withdrawals).values({
+    userId: user1.id,
+    amount: '500.00',
+    status: 'pending',
+    upiId:  'ravi@upi',
+  });
+
   // ════════════════════════════════════════════
   // DONE
   // ════════════════════════════════════════════
-  console.log('\n✅ Seed complete! All 34 tables have at least 1 row.\n');
+  console.log('\n✅ Seed complete! All 37 tables have at least 1 row.\n');
   console.log('Summary:');
   console.log('  Independent tables : 8  rows inserted');
-  console.log('  Core tables        : 7  rows inserted (+ 1 extra user for referral)');
+  console.log('  Core tables        : 10 rows inserted (+ 1 extra user for referral)');
   console.log('  Junction tables    : 6  rows inserted');
   console.log('  Dependent tables   : 13 rows inserted');
-  console.log('  Total              : 34+ rows across 34 tables');
+  console.log('  Total              : 37+ rows across 37 tables');
 
   process.exit(0);
 }
