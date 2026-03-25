@@ -25,6 +25,10 @@ export const campaignStatusEnum = pgEnum('campaign_status', [
   'draft', 'scheduled', 'sent', 'failed'
 ]);
 
+export const userRoleEnum = pgEnum('user_role', [
+  'admin', 'user'
+]);
+
 // ── 9. users ──
 export const users = pgTable('users', {
   id:               uuid('id').primaryKey().defaultRandom(),
@@ -35,6 +39,7 @@ export const users = pgTable('users', {
   phone:            varchar('phone', { length: 20 }).notNull().unique(),
   passwordHash:     varchar('password_hash', { length: 255 }).notNull(),
   avatarUrl:        text('avatar_url'),
+  role:             userRoleEnum('role').notNull().default('user'),
   points:           integer('points').notNull().default(0),
   totalPoints:      integer('total_points').notNull().default(0),
   status:           userStatusEnum('status').notNull().default('active'),
@@ -60,6 +65,7 @@ export const admins = pgTable('admins', {
   name:         varchar('name', { length: 200 }).notNull(),
   email:        varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
+  role:             userRoleEnum('role').notNull().default('admin'),
   isActive:     boolean('is_active').notNull().default(true),
   lastLoginAt:  timestamp('last_login_at'),
   createdAt:    timestamp('created_at').defaultNow(),
@@ -77,8 +83,10 @@ export const draws = pgTable('draws', {
   currentEntries:  integer('current_entries').notNull().default(0),
   status:          drawStatusEnum('status').notNull().default('draft'),
   drawDate:        timestamp('draw_date').notNull(),
+  drawstartDate: timestamp('draw_start_date').notNull(),
+  drawendDate : timestamp('draw_end_date').notNull(),
   description:     text('description'),
-  rngSeedHash:     varchar('rng_seed_hash', { length: 64 }),
+  rngSeedHash:     varchar('rng_seed_hash', { length: 124 }),
   isGuaranteed:    boolean('is_guaranteed').notNull().default(true),
   minEntries:      integer('min_entries').default(10),
   createdAt:       timestamp('created_at').defaultNow(),
@@ -87,7 +95,6 @@ export const draws = pgTable('draws', {
   statusIdx:   index('draws_status_idx').on(t.status),
   drawDateIdx: index('draws_date_idx').on(t.drawDate),
 }));
-
 // ── 12. wallets ──
 export const wallets = pgTable('wallets', {
   id:            uuid('id').primaryKey().defaultRandom(),
