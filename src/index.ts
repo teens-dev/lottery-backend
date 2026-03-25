@@ -50,15 +50,11 @@ app.get("/test", (req, res) => {
   res.send("Server is working");
 });
 
-
-
-// ✅ ROUTES (ORDER IMPORTANT)
-app.use("/api/users", userRoutes); // ✅ MUST BE HERE
+// ✅ Routes
+app.use("/api/revenue", revenueRoutes);
+app.use("/api/users", userRoutes);
 app.use("/api", drawRoutes);
 app.use("/api/payments", paymentRoutes);
-app.use("/api/categories", categoryRoutes);
-app.use("/api/wallet", walletRoutes);
-app.use("/api/revenue", revenueRoutes);
 
 // ✅ Server
 const PORT = 10000;
