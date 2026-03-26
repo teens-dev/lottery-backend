@@ -16,9 +16,23 @@ import adminRoutes from "./api/routes/admin.route";
 
 dotenv.config();
 
+
+
 const app = express();
 
-// ✅ Swagger configuration
+// ✅ CORS
+app.use(
+  cors({
+    origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+  })
+);
+
+// ✅ Middleware
+app.use(express.json());
+
+// ✅ Swagger
 const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
@@ -39,20 +53,7 @@ const swaggerOptions = {
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
-// ✅ Swagger route
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
-// ✅ CORS (FIXED for cookies)
-app.use(
-  cors({
-    origin: "http://localhost:3000", // frontend
-    credentials: true, // 🔥 REQUIRED for cookies
-  })
-);
-
-// ✅ Middlewares
-app.use(express.json());
-app.use(cookieParser());
 
 // ✅ Test route
 app.get("/", (req, res) => {
@@ -60,7 +61,8 @@ app.get("/", (req, res) => {
 });
 
 // ✅ Routes
-app.use("/api", userRoutes);
+app.use("/api/revenue", revenueRoutes);
+app.use("/api/users", userRoutes);
 app.use("/api", drawRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/auth", authRoutes);
