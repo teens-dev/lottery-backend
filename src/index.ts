@@ -4,6 +4,7 @@ import revenueRoutes from "./api/routes/revenue.routes";
 import drawRoutes from "./api/routes/draw.routes";
 import paymentRoutes from "./api/routes/payment.routes";
 import userRoutes from "./api/routes/user.routes";
+import ticketRoutes from "./api/routes/ticket.routes";
 import swaggerUi from "swagger-ui-express";
 import swaggerJsdoc from "swagger-jsdoc";
 
@@ -55,6 +56,7 @@ app.use("/api/revenue", revenueRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api", drawRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/tickets", ticketRoutes);
 
 // ✅ Server
 const PORT = 10000;
