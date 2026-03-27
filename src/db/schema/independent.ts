@@ -1,6 +1,6 @@
 import {
   pgTable, serial, varchar, boolean,
-  text, integer, jsonb, timestamp, pgEnum
+  text, integer, jsonb, timestamp, pgEnum, numeric
 } from 'drizzle-orm/pg-core';
 
 
@@ -31,6 +31,8 @@ export const gameTypes = pgTable('game_types', {
   description: text('description'),
   icon: varchar('icon', { length: 10 }),
   isActive: boolean('is_active').notNull().default(true),
+  entryFee: numeric('entry_fee', { precision: 10, scale: 2 }).notNull().default('0'),
+  commissionRate: numeric('commission_rate', { precision: 5, scale: 2 }).notNull().default('0.10'), // Default 10%
   createdAt: timestamp('created_at').defaultNow(),
   type: gameTypeEnum('type').notNull(),
 });

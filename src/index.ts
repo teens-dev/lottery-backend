@@ -49,9 +49,12 @@ app.get("/test", (req, res) => {
 
 
 
+import levelRoutes from "./api/routes/level.routes";
+
 // ✅ ROUTES (ORDER IMPORTANT)
 app.use("/api/users", userRoutes); // ✅ MUST BE HERE
 app.use("/api", drawRoutes);
+app.use("/api", levelRoutes); // ✅ NEW: Level Game Routes
 app.use("/api/payments", paymentRoutes);
 app.use("/api/categories", categoryRoutes);
 
