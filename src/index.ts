@@ -13,6 +13,7 @@ import paymentRoutes from "./api/routes/payment.routes";
 import authRoutes from "./api/routes/auth.routes";
 import userRoutes from "./api/routes/user.routes";
 import adminRoutes from "./api/routes/admin.route";
+import ticketRoutes from "./api/routes/ticket.routes";
 
 dotenv.config();
 
@@ -60,13 +61,21 @@ app.get("/", (req, res) => {
   res.send("API is running 🚀");
 });
 
+
+
+import levelRoutes from "./api/routes/level.routes";
+
+// ✅ ROUTES (ORDER IMPORTANT)
+app.use("/api/users", userRoutes); // ✅ MUST BE HERE
 // ✅ Routes
 app.use("/api/revenue", revenueRoutes);
-app.use("/api/users", userRoutes);
+
 app.use("/api", drawRoutes);
+app.use("/api", levelRoutes); // ✅ NEW: Level Game Routes
 app.use("/api/payments", paymentRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/tickets", ticketRoutes);
 
 // ✅ Port setup
 const PORT = process.env.PORT || 10000;

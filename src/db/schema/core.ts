@@ -29,6 +29,22 @@ export const userRoleEnum = pgEnum('user_role', [
   'admin', 'user'
 ]);
 
+export const poolStatusEnum = pgEnum('pool_status', [
+  'filling',
+  'completed',
+]);
+
+export const entryStatusEnum = pgEnum('entry_status', [
+  'active',
+  'paid',
+]);
+
+export const withdrawalStatusEnum = pgEnum('withdrawal_status', [
+  'pending',
+  'success',
+  'failed',
+]);
+
 // ── 9. users ──
 export const users = pgTable('users', {
   id:               uuid('id').primaryKey().defaultRandom(),
@@ -149,3 +165,62 @@ export const notificationCampaigns = pgTable('notification_campaigns', {
   status:           campaignStatusEnum('status').notNull().default('draft'),
   createdAt:        timestamp('created_at').defaultNow(),
 });
+
+
+export const levelPools = pgTable('level_pools', {
+  id: uuid('id').primaryKey().defaultRandom(),
+
+  gameTypeId: integer('game_type_id')
+    .references(() => gameTypes.id)
+    .notNull(),
+
+  level: integer('level').notNull(), // 1,2,3...
+
+  requiredCount: integer('required_count').notNull(), // 4,16,64
+
+  currentCount: integer('current_count').notNull().default(0),
+
+  status: poolStatusEnum('status').notNull().default('filling'),
+
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const levelEntries = pgTable('level_entries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+
+  userId: uuid('user_id')
+    .references(() => users.id)
+    .notNull(),
+
+  gameTypeId: integer('game_type_id')
+    .references(() => gameTypes.id)
+    .notNull(),
+
+  poolId: uuid('pool_id')
+    .references(() => levelPools.id)
+    .notNull(),
+
+  level: integer('level').notNull(),
+
+  amountPaid: numeric('amount_paid', { precision: 10, scale: 2 }).notNull(),
+
+  status: entryStatusEnum('status').notNull().default('active'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const withdrawals = pgTable('withdrawals', {
+  id: uuid('id').primaryKey().defaultRandom(),
+
+  userId: uuid('user_id')
+    .references(() => users.id)
+    .notNull(),
+
+  amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+
+  status: withdrawalStatusEnum('status').notNull().default('pending'),
+
+  upiId: varchar('upi_id', { length: 100 }),
+
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
