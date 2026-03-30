@@ -5,7 +5,6 @@ import {
   getTransactions,
   payTicket,
 } from "../controllers/wallet.controller";
-import { authMiddleware } from "../middleware/auth.middleware";
 
 const router = Router();
 
@@ -29,14 +28,12 @@ const router = Router();
  *         schema:
  *           type: string
  *         example: a9824974-b278-4c38-a383-188622ddf7a9
- *         description: Pass userId for testing (optional if JWT used)
+ *         description: Pass userId for testing
  *     responses:
  *       200:
  *         description: Wallet balance fetched successfully
- *       401:
- *         description: Unauthorized
  */
-router.get("/balance", authMiddleware, getWalletBalance);
+router.get("/balance", getWalletBalance);
 
 
 /**
@@ -68,10 +65,8 @@ router.get("/balance", authMiddleware, getWalletBalance);
  *     responses:
  *       200:
  *         description: Deposit successful
- *       401:
- *         description: Unauthorized
  */
-router.post("/deposit", authMiddleware, depositWallet);
+router.post("/deposit", depositWallet);
 
 
 /**
@@ -90,10 +85,8 @@ router.post("/deposit", authMiddleware, depositWallet);
  *     responses:
  *       200:
  *         description: Wallet transactions list
- *       401:
- *         description: Unauthorized
  */
-router.get("/transactions", authMiddleware, getTransactions);
+router.get("/transactions", getTransactions);
 
 
 /**
@@ -122,25 +115,7 @@ router.get("/transactions", authMiddleware, getTransactions);
  *     responses:
  *       200:
  *         description: Ticket purchased successfully
- *       401:
- *         description: Unauthorized
  */
-router.post("/pay-ticket", authMiddleware, payTicket);
+router.post("/pay-ticket", payTicket);
 
 export default router;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
