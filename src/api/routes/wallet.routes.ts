@@ -128,3 +128,19 @@ router.get("/transactions", authMiddleware, getTransactions);
 router.post("/pay-ticket", authMiddleware, payTicket);
 
 export default router;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
