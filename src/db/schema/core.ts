@@ -25,6 +25,26 @@ export const campaignStatusEnum = pgEnum('campaign_status', [
   'draft', 'scheduled', 'sent', 'failed'
 ]);
 
+export const userRoleEnum = pgEnum('user_role', [
+  'admin', 'user'
+]);
+
+export const poolStatusEnum = pgEnum('pool_status', [
+  'filling',
+  'completed',
+]);
+
+export const entryStatusEnum = pgEnum('entry_status', [
+  'active',
+  'paid',
+]);
+
+export const withdrawalStatusEnum = pgEnum('withdrawal_status', [
+  'pending',
+  'success',
+  'failed',
+]);
+
 // ── 9. users ──
 export const users = pgTable('users', {
   id:               uuid('id').primaryKey().defaultRandom(),
@@ -35,6 +55,7 @@ export const users = pgTable('users', {
   phone:            varchar('phone', { length: 20 }).notNull().unique(),
   passwordHash:     varchar('password_hash', { length: 255 }).notNull(),
   avatarUrl:        text('avatar_url'),
+  role:             userRoleEnum('role').notNull().default('user'),
   points:           integer('points').notNull().default(0),
   totalPoints:      integer('total_points').notNull().default(0),
   status:           userStatusEnum('status').notNull().default('active'),
@@ -60,6 +81,7 @@ export const admins = pgTable('admins', {
   name:         varchar('name', { length: 200 }).notNull(),
   email:        varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
+  role:             userRoleEnum('role').notNull().default('admin'),
   isActive:     boolean('is_active').notNull().default(true),
   lastLoginAt:  timestamp('last_login_at'),
   createdAt:    timestamp('created_at').defaultNow(),
@@ -77,8 +99,10 @@ export const draws = pgTable('draws', {
   currentEntries:  integer('current_entries').notNull().default(0),
   status:          drawStatusEnum('status').notNull().default('draft'),
   drawDate:        timestamp('draw_date').notNull(),
+  drawstartDate: timestamp('draw_start_date').notNull(),
+  drawendDate : timestamp('draw_end_date').notNull(),
   description:     text('description'),
-  rngSeedHash:     varchar('rng_seed_hash', { length: 64 }),
+  rngSeedHash:     varchar('rng_seed_hash', { length: 124 }),
   isGuaranteed:    boolean('is_guaranteed').notNull().default(true),
   minEntries:      integer('min_entries').default(10),
   createdAt:       timestamp('created_at').defaultNow(),
@@ -87,7 +111,6 @@ export const draws = pgTable('draws', {
   statusIdx:   index('draws_status_idx').on(t.status),
   drawDateIdx: index('draws_date_idx').on(t.drawDate),
 }));
-
 // ── 12. wallets ──
 export const wallets = pgTable('wallets', {
   id:            uuid('id').primaryKey().defaultRandom(),
@@ -142,3 +165,62 @@ export const notificationCampaigns = pgTable('notification_campaigns', {
   status:           campaignStatusEnum('status').notNull().default('draft'),
   createdAt:        timestamp('created_at').defaultNow(),
 });
+
+
+export const levelPools = pgTable('level_pools', {
+  id: uuid('id').primaryKey().defaultRandom(),
+
+  gameTypeId: integer('game_type_id')
+    .references(() => gameTypes.id)
+    .notNull(),
+
+  level: integer('level').notNull(), // 1,2,3...
+
+  requiredCount: integer('required_count').notNull(), // 4,16,64
+
+  currentCount: integer('current_count').notNull().default(0),
+
+  status: poolStatusEnum('status').notNull().default('filling'),
+
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const levelEntries = pgTable('level_entries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+
+  userId: uuid('user_id')
+    .references(() => users.id)
+    .notNull(),
+
+  gameTypeId: integer('game_type_id')
+    .references(() => gameTypes.id)
+    .notNull(),
+
+  poolId: uuid('pool_id')
+    .references(() => levelPools.id)
+    .notNull(),
+
+  level: integer('level').notNull(),
+
+  amountPaid: numeric('amount_paid', { precision: 10, scale: 2 }).notNull(),
+
+  status: entryStatusEnum('status').notNull().default('active'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const withdrawals = pgTable('withdrawals', {
+  id: uuid('id').primaryKey().defaultRandom(),
+
+  userId: uuid('user_id')
+    .references(() => users.id)
+    .notNull(),
+
+  amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+
+  status: withdrawalStatusEnum('status').notNull().default('pending'),
+
+  upiId: varchar('upi_id', { length: 100 }),
+
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
