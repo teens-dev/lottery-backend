@@ -1,12 +1,21 @@
 import express from "express";
 import cors from "cors";
-import revenueRoutes from "./api/routes/revenue.routes";
+import cookieParser from "cookie-parser";
+import dotenv from "dotenv";
+
+// ✅ Swagger imports (FIXED)
+import swaggerJsdoc from "swagger-jsdoc";
+import swaggerUi from "swagger-ui-express";
+
+// Routes
 import drawRoutes from "./api/routes/draw.routes";
 import paymentRoutes from "./api/routes/payment.routes";
+import authRoutes from "./api/routes/auth.routes";
 import userRoutes from "./api/routes/user.routes";
+import adminRoutes from "./api/routes/admin.route";
 import ticketRoutes from "./api/routes/ticket.routes";
-import swaggerUi from "swagger-ui-express";
-import swaggerJsdoc from "swagger-jsdoc";
+
+dotenv.config();
 
 
 
@@ -35,7 +44,8 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: "http://localhost:10000",
+        url: "http://localhost:10000", // ✅ FIXED PORT
+        description: "Local server",
       },
     ],
   },
@@ -47,8 +57,8 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // ✅ Test route
-app.get("/test", (req, res) => {
-  res.send("Server is working");
+app.get("/", (req, res) => {
+  res.send("API is running 🚀");
 });
 
 
@@ -63,11 +73,14 @@ app.use("/api/revenue", revenueRoutes);
 app.use("/api", drawRoutes);
 app.use("/api", levelRoutes); // ✅ NEW: Level Game Routes
 app.use("/api/payments", paymentRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/tickets", ticketRoutes);
 
-// ✅ Server
-const PORT = 10000;
+// ✅ Port setup
+const PORT = process.env.PORT || 10000;
 
+// ✅ Start server
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
