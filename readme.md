@@ -1091,7 +1091,8 @@ RAZORPAY_KEY_ID="rzp_test_SRrKIfsKje5uNq"
 RAZORPAY_KEY_SECRET="KfntU4VVvNMAX64AvdhClFNd"
 
 
-
+EMAIL_USER=gkmurthy2312@gmail.com
+EMAIL_PASS=pfco wufq xebr awxu
 
 
 -- Remove manual adjustment type 
