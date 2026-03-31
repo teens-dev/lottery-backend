@@ -64,6 +64,7 @@ app.get("/", (req, res) => {
 
 
 import levelRoutes from "./api/routes/level.routes";
+import revenueRoutes from "./api/routes/revenue.routes";
 
 // ✅ ROUTES (ORDER IMPORTANT)
 app.use("/api/users", userRoutes); // ✅ MUST BE HERE
