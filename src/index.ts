@@ -3,7 +3,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 
-// ✅ Swagger imports (FIXED)
+// Swagger
 import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
 
@@ -13,10 +13,10 @@ import paymentRoutes from "./api/routes/payment.routes";
 import authRoutes from "./api/routes/auth.routes";
 import userRoutes from "./api/routes/user.routes";
 import adminRoutes from "./api/routes/admin.route";
+import revenueRoutes from "./api/routes/revenue.routes";
+import referralRoutes from "./api/routes/referral.routes";
 
 dotenv.config();
-
-
 
 const app = express();
 
@@ -31,8 +31,9 @@ app.use(
 
 // ✅ Middleware
 app.use(express.json());
+app.use(cookieParser());   // ✅ IMPORTANT FIX
 
-// ✅ Swagger
+// Swagger
 const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
@@ -43,8 +44,7 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: "http://localhost:10000", // ✅ FIXED PORT
-        description: "Local server",
+        url: "http://localhost:10000",
       },
     ],
   },
@@ -55,23 +55,21 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// ✅ Test route
 app.get("/", (req, res) => {
   res.send("API is running 🚀");
 });
 
-// ✅ Routes
+// Routes
 app.use("/api/revenue", revenueRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api", drawRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/referral", referralRoutes);
 
-// ✅ Port setup
 const PORT = process.env.PORT || 10000;
 
-// ✅ Start server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
