@@ -1095,3 +1095,16 @@ JWT_SECRET=22acf41ebb7d622101279e4e543489c60b05e591878a87398ab225b20d343e8a62c22
 EMAIL_USER=gkmurthy2312@gmail.com
 EMAIL_PASS=pfco wufq xebr awxu
 
+DATABASE_URL="postgresql://postgres:1272@localhost:5432/lottery-backend"
+
+#DATABASE_URL="postgresql://postgres:password@localhost:5432/dtabase_name"
+NODE_ENV="development"
+RAZORPAY_KEY_ID="rzp_test_SRrKIfsKje5uNq"
+RAZORPAY_KEY_SECRET="KfntU4VVvNMAX64AvdhClFNd"
+JWT_SECRET=22acf41ebb7d622101279e4e543489c60b05e591878a87398ab225b20d343e8a62c222abe976f737613e4c297e9b6a0b58969223b8f863b5d154d086011f3139
+
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587 
+SMTP_USER=lavanyagali1272@gmail.com 
+SMTP_PASS=yojpzcnbvohvdofz 
+FROM_EMAIL="Lottery App <lavanyagali1272@gmail.com>"
