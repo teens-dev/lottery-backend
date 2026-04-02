@@ -13,8 +13,8 @@ export const getCategories = async (req: Request, res: Response) => {
 
 export const createCategory = async (req: Request, res: Response) => {
   try {
-    const { name, description, icon } = req.body;
-    const newCategory = await db.insert(gameTypes).values({ name, description, icon }).returning();
+    const { name, description, icon, type } = req.body;
+    const newCategory = await db.insert(gameTypes).values({ name, description, icon, type }).returning();
     res.status(201).json({ success: true, data: newCategory });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server Error" });

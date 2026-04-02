@@ -257,3 +257,206 @@ export const getPaymentStats = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to fetch payment statistics" });
   }
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WEBHOOK HANDLER
+// Route: POST /api/payments/webhook
+//
+// PURPOSE:
+//   Razorpay sends server-to-server POST requests to this endpoint whenever a
+//   payment event occurs (capture, failure, refund, etc.).
+//   This handler processes the "payment.captured" event to:
+//     1. Verify the request genuinely came from Razorpay (HMAC SHA256 signature)
+//     2. Find the pending transaction using the razorpay_order_id stored as txnRef
+//     3. Guard against duplicate processing (idempotency check)
+//     4. Update the transaction status to "success"
+//     5. Credit the user's wallet balance
+//
+// IMPORTANT — BODY PARSING:
+//   Razorpay requires the RAW (un-parsed) request body to verify the HMAC
+//   signature. This route is registered BEFORE app.use(express.json()) in
+//   src/index.ts, using express.raw({ type: "application/json" }), so req.body
+//   here is a Buffer, not a parsed object.
+//
+// DO NOT:
+//   - Create tickets here (ticket creation belongs to /verify which the frontend calls)
+//   - Modify the existing createRazorpayOrder or verifyRazorpayPayment functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const handleRazorpayWebhook = async (req: Request, res: Response) => {
+  // ── Step 1: Log arrival ─────────────────────────────────────────────────
+  // Every webhook hit should appear in logs so we can trace Razorpay callbacks.
+  console.log("[Webhook] Received Razorpay webhook request");
+
+  // ── Step 2: Extract the Razorpay signature header ───────────────────────
+  // Razorpay attaches X-Razorpay-Signature to every webhook POST.
+  // Absence of the header means the request did not come from Razorpay.
+  const razorpaySignature = req.headers["x-razorpay-signature"] as string;
+
+  if (!razorpaySignature) {
+    console.error("[Webhook] Missing X-Razorpay-Signature header — rejected");
+    return res.status(400).json({ error: "Missing signature header" });
+  }
+
+  // ── Step 3: Get the raw Buffer body ────────────────────────────────────
+  // This route is mounted with express.raw({ type: "application/json" }) in
+  // src/index.ts (BEFORE express.json()), so req.body is a Buffer here.
+  // We MUST use the raw bytes (not re-serialised JSON) to match Razorpay's HMAC.
+  const rawBody = req.body as Buffer;
+
+  if (!rawBody || rawBody.length === 0) {
+    console.error("[Webhook] Empty request body — rejected");
+    return res.status(400).json({ error: "Empty request body" });
+  }
+
+  // ── Step 4: Verify HMAC SHA256 signature ────────────────────────────────
+  // Razorpay signs the raw body with the Webhook Secret configured in:
+  //   Razorpay Dashboard → Settings → Webhooks → [your webhook] → Secret
+  // Store that secret in .env as RAZORPAY_WEBHOOK_SECRET.
+  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || "";
+
+  if (!webhookSecret) {
+    // Misconfiguration — return 500 so Razorpay retries after env var is set
+    console.error("[Webhook] RAZORPAY_WEBHOOK_SECRET env var is not set!");
+    return res.status(500).json({ error: "Webhook secret not configured" });
+  }
+
+  const expectedSignature = crypto
+    .createHmac("sha256", webhookSecret)
+    .update(rawBody) // ← must be the raw Buffer, NOT JSON.stringify(parsedBody)
+    .digest("hex");
+
+  if (expectedSignature !== razorpaySignature) {
+    // Signature mismatch → request is forged or tampered → hard reject
+    console.error("[Webhook] Signature mismatch — possible forged request");
+    console.error(`[Webhook] Expected: ${expectedSignature}`);
+    console.error(`[Webhook] Received: ${razorpaySignature}`);
+    return res.status(400).json({ error: "Invalid webhook signature" });
+  }
+
+  console.log("[Webhook] Signature verified ✅");
+
+  // ── Step 5: Parse the (now trusted) JSON payload ────────────────────────
+  let payload: any;
+  try {
+    payload = JSON.parse(rawBody.toString("utf8"));
+  } catch (parseError) {
+    console.error("[Webhook] Failed to parse JSON payload:", parseError);
+    return res.status(400).json({ error: "Invalid JSON payload" });
+  }
+
+  const eventType: string = payload?.event;
+  console.log(`[Webhook] Event type: "${eventType}"`);
+
+  // ── Step 6: Route on event type ─────────────────────────────────────────
+  // Only "payment.captured" mutates data. All other events are acknowledged
+  // with 200 and skipped — Razorpay requires 200 for events we don't act on,
+  // otherwise it keeps retrying.
+  if (eventType !== "payment.captured") {
+    console.log(`[Webhook] Event "${eventType}" not handled — acknowledging without action`);
+    return res.status(200).json({ message: "Event acknowledged, not processed" });
+  }
+
+  // ── Step 7: Extract payment entity from payload ─────────────────────────
+  // Razorpay webhook payload shape for payment.captured:
+  // {
+  //   event: "payment.captured",
+  //   payload: { payment: { entity: { id, order_id, amount, ... } } }
+  // }
+  const paymentEntity = payload?.payload?.payment?.entity;
+
+  if (!paymentEntity) {
+    console.error("[Webhook] payment.entity missing in payload — malformed");
+    return res.status(400).json({ error: "Malformed webhook payload" });
+  }
+
+  const {
+    id: razorpayPaymentId,    // "pay_xxx" — Razorpay payment ID
+    order_id: razorpayOrderId, // "order_xxx" — the order we created; stored as txnRef
+    amount: amountInPaise,    // integer, paise (e.g. 50000 = ₹500)
+  } = paymentEntity;
+
+  console.log(`[Webhook] Captured — order: ${razorpayOrderId}, payment: ${razorpayPaymentId}, amount: ${amountInPaise} paise`);
+
+  if (!razorpayOrderId) {
+    console.error("[Webhook] order_id missing from payment entity");
+    return res.status(400).json({ error: "order_id not found in payload" });
+  }
+
+  // ── Step 8: Look up the transaction by txnRef ──────────────────────────
+  // In createRazorpayOrder we set: txnRef = order.id  (the Razorpay order ID)
+  // So we find the pending transaction by matching txnRef = razorpayOrderId.
+  const existingTxns = await db
+    .select()
+    .from(transactions)
+    .where(eq(transactions.txnRef, razorpayOrderId));
+
+  if (existingTxns.length === 0) {
+    // No matching transaction — could be a webhook for an order created outside
+    // this system (e.g. Razorpay test from dashboard). Log and return 200 so
+    // Razorpay stops retrying.
+    console.warn(`[Webhook] No transaction found for order: ${razorpayOrderId} — skipping`);
+    return res.status(200).json({ message: "Transaction not found — skipped" });
+  }
+
+  const txn = existingTxns[0];
+  console.log(`[Webhook] Found transaction ID: ${txn.id}, wallet: ${txn.walletId}, status: "${txn.status}"`);
+
+  // ── Step 9: Idempotency guard — prevent double-crediting ────────────────
+  // The /verify endpoint (called by the frontend) may have already set the
+  // status to "success". If so, the wallet was already credited — bail out.
+  // This is the single most important guard to prevent duplicate wallet credits.
+  if (txn.status === "success") {
+    console.log(`[Webhook] Transaction ${txn.id} already "success" — duplicate webhook ignored`);
+    return res.status(200).json({ message: "Already processed — no-op" });
+  }
+
+  // ── Step 10: Atomically update transaction + credit wallet ───────────────
+  // db.transaction() ensures BOTH updates succeed or BOTH roll back.
+  // A partial update (txn success but wallet not credited, or vice-versa)
+  // would create an inconsistent financial state.
+  try {
+    await db.transaction(async (tx) => {
+
+      // 10a. Mark transaction as "success" and record the Razorpay payment ID
+      await tx
+        .update(transactions)
+        .set({
+          status: "success",
+          gatewayTxnId: razorpayPaymentId, // "pay_xxx" — useful for reconciliation
+          note: `Webhook: payment.captured — ${razorpayPaymentId}`,
+        })
+        .where(eq(transactions.txnRef, razorpayOrderId));
+
+      console.log(`[Webhook] Transaction ${txn.id} updated to "success"`);
+
+      // 10b. Credit the wallet
+      // Razorpay sends amount in paise (integer) — convert to INR rupees (÷100)
+      // for our wallet which stores numeric values in rupees (e.g. "4200.00").
+      const amountInRupees = (amountInPaise / 100).toFixed(2);
+
+      // Use a raw SQL expression so Postgres performs the addition atomically.
+      // This avoids the read-then-write race condition that could occur if two
+      // concurrent DB calls both read the same balance.
+      await tx
+        .update(wallets)
+        .set({
+          balance: sql`${wallets.balance}::numeric + ${amountInRupees}::numeric`,
+          updatedAt: new Date(),
+        })
+        .where(eq(wallets.id, txn.walletId));
+
+      console.log(`[Webhook] Wallet ${txn.walletId} credited ₹${amountInRupees}`);
+    });
+
+    console.log(`[Webhook] ✅ payment.captured processed for order ${razorpayOrderId}`);
+    return res.status(200).json({ message: "Webhook processed successfully" });
+
+  } catch (dbError: any) {
+    // Return 500 so Razorpay automatically retries — the idempotency guard
+    // above means a retry is safe even after a partial success.
+    console.error("[Webhook] DB transaction failed:", dbError.message);
+    return res.status(500).json({ error: "Database error processing webhook" });
+  }
+};
+
