@@ -19,9 +19,10 @@ import ticketRoutes from "./api/routes/ticket.routes";
 
 dotenv.config();
 
-const app = express();
 
-// ✅ CORS
+import walletRoutes from "./api/routes/wallet.routes";
+
+const app = express();
 app.use(
   cors({
     origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -29,8 +30,6 @@ app.use(
     credentials: true,
   })
 );
-
-// ✅ Middleware
 app.use(express.json());
 app.use(cookieParser());   // ✅ IMPORTANT FIX
 
@@ -77,6 +76,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/referral", referralRoutes);
 app.use("/api/tickets", ticketRoutes);
+app.use("/api", walletRoutes);
 
 const PORT = process.env.PORT || 10000;
 
