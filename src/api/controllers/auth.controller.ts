@@ -2,7 +2,7 @@ import type { Request as ExpressRequest, Response as ExpressResponse } from "exp
 import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { db } from "../../db/db";
-import { users } from "../../db/schema";
+import { users, referralCodes, referrals } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import { sendWelcomeEmail } from "../../utils/sendEmail";
 
@@ -10,6 +10,18 @@ const JWT_SECRET = process.env.JWT_SECRET as string;
 
 const JWT_OPTIONS: SignOptions = {
   expiresIn: (process.env.JWT_EXPIRES_IN as SignOptions["expiresIn"]) || "7d",
+};
+
+/* Generate Referral Code */
+const generateReferralCode = () => {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let code = "REF";
+
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+
+  return code;
 };
 
 
@@ -20,7 +32,7 @@ export const register = async (
 ) => {
   try {
 
-    const { name, email, phone, password, level_id, country_id } = req.body;
+    const { name, email, phone, password, level_id, country_id, referralCode } = req.body;
 
     if (!name || !email || !password || !level_id || !country_id) {
       return res.status(400).json({
@@ -68,6 +80,46 @@ export const register = async (
       });
 
     const user = insertedUser[0];
+
+    /* =========================
+       CREATE REFERRAL CODE
+    ========================== */
+
+    const code = generateReferralCode();
+
+    await db.insert(referralCodes).values({
+      userId: user.id,
+      code
+    });
+
+    /* =========================
+       VERIFY REFERRAL CODE
+    ========================== */
+
+    if (referralCode) {
+
+      const referrer = await db
+        .select()
+        .from(referralCodes)
+        .where(eq(referralCodes.code, referralCode))
+        .limit(1);
+
+      if (referrer.length > 0) {
+
+        await db.insert(referrals).values({
+          referrerUserId: referrer[0].userId,
+          referredUserId: user.id
+        });
+
+        await db
+          .update(referralCodes)
+          .set({
+            totalReferrals: referrer[0].totalReferrals + 1
+          })
+          .where(eq(referralCodes.userId, referrer[0].userId));
+
+      }
+    }
 
     /* ✅ Send Welcome Email (Non-blocking) */
     sendWelcomeEmail(user.email, user.name).catch(err =>

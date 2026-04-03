@@ -19,7 +19,7 @@ import referralRoutes from "./api/routes/referral.routes";
 dotenv.config();
 
 const app = express();
-
+  
 // ✅ CORS
 app.use(
   cors({
@@ -73,3 +73,5 @@ const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
+
+

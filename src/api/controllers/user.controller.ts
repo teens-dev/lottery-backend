@@ -3,10 +3,7 @@ import { db } from "../../db/index";
 import { users, wallets, transactions } from "../../db/schema";
 import { eq } from "drizzle-orm";
 
-
-
-
-
+// Get All Users
 export const getUsers = async (req: Request, res: Response) => {
   try {
     const result = await db
@@ -49,13 +46,10 @@ export const getUsersWithCount = async (req: Request, res: Response) => {
 
 
 // Get Single User Details
-export const getUserById = async (
-  req: Request<{ id: string }>, 
-  res: Response
-) => {
+export const getUserById = async (req: Request, res: Response) => {
   try {
 
-    const id = req.params.id;
+    const id = req.params.id as string;
 
     const user = await db
       .select()
