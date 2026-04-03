@@ -37,7 +37,7 @@ export const gameTypes = pgTable('game_types', {
   type: gameTypeEnum('type').notNull(),
 });
 
-// ── 3. payment_methods ──
+// ── 3. payment_methods ── 
 export const paymentMethods = pgTable('payment_methods', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 50 }).notNull().unique(),

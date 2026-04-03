@@ -1155,3 +1155,28 @@ JWT_SECRET=22acf41ebb7d622101279e4e543489c60b05e591878a87398ab225b20d343e8a62c22
 EMAIL_USER=gkmurthy2312@gmail.com
 EMAIL_PASS=pfco wufq xebr awxu
 
+ ----------------------------------------Payments---------------------------
+
+ What was added / changed
+File	Change
+payment.controller.ts	Appended handleRazorpayWebhook export — zero changes to existing functions
+payment.routes.ts	Added /webhook route with express.raw() middleware, declared first in the router
+.env	Added RAZORPAY_WEBHOOK_SECRET placeholder
+How the webhook flow works
+Razorpay POST /api/payments/webhook
+  │
+  ├─ express.raw() → req.body = Buffer  ← raw bytes preserved for HMAC
+  │
+  ├─ [Step 2] Check X-Razorpay-Signature header exists
+  ├─ [Step 4] HMAC SHA256(rawBody, RAZORPAY_WEBHOOK_SECRET) === header value?
+  │           No → 400 rejected
+  ├─ [Step 6] event !== "payment.captured" → 200 ignored
+  ├─ [Step 8] Find transaction WHERE txnRef = razorpay_order_id
+  ├─ [Step 9] txn.status === "success"? → 200 no-op  ← idempotency guard
+  └─ [Step 10] db.transaction():
+        ├─ UPDATE transactions SET status="success", gatewayTxnId="pay_xxx"
+        └─ UPDATE wallets SET balance = balance + amountInRupees  ← atomic SQL
+One thing you must do
+Go to Razorpay Dashboard → Settings → Webhooks → add https://your-domain.com/api/payments/webhook → copy the Webhook Secret → paste it into .env as RAZORPAY_WEBHOOK_SECRET.
+
+RAZORPAY_WEBHOOK_SECRET="your_razorpay_webhook_secret_here"

@@ -4,6 +4,7 @@ import {
   createRazorpayOrder, 
   verifyRazorpayPayment,
   handleRazorpayWebhook,
+  getAdminTransactions,
 } from "../controllers/payment.controller";
 
 /**
@@ -42,8 +43,15 @@ router.post(
 
 /**
  * GET /api/payments/stats
+ * Admin only stats for the dashboard.
  */
 router.get("/stats", getPaymentStats);
+
+/**
+ * GET /api/payments/transactions
+ * Admin only transaction history.
+ */
+router.get("/transactions", getAdminTransactions);
 
 /**
  * POST /api/payments/create-order

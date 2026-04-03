@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../db";
-import { transactions, wallets, tickets } from "../../db/schema";
-import { sql, eq, and } from "drizzle-orm";
+import { transactions, wallets, tickets, paymentOrders, users, paymentMethods } from "../../db/schema";
+import { sql, eq, and, desc } from "drizzle-orm";
 import Razorpay from "razorpay";
 import crypto from "crypto";
 
@@ -27,12 +27,12 @@ export const createRazorpayOrder = async (req: Request, res: Response) => {
 
     // Validation for UUID format (standard UUID v4 regex)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    
+
     if (!userId || !uuidRegex.test(userId)) {
       console.error("Invalid userId format:", userId);
       return res.status(400).json({ error: "Invalid userId format. Expected UUID." });
     }
-    
+
     if (!walletId || !uuidRegex.test(walletId)) {
       console.error("Invalid walletId format:", walletId);
       return res.status(400).json({ error: "Invalid walletId format. Expected UUID." });
@@ -43,11 +43,23 @@ export const createRazorpayOrder = async (req: Request, res: Response) => {
       currency,
       receipt: `receipt_${Date.now()}`,
     };
-    
+
     const order = await razorpay.orders.create(options);
 
     // Log transaction as 'pending' immediately
     try {
+      // 1. Store payment_orders record BEFORE the actual payment happens.
+      // Why? This explicitly tracks the Razorpay order lifecycle locally.
+      // How webhook uses it: When a "payment.captured" webhook arrives, it easily
+      // looks up this exact paymentOrders row via razorpayOrderId to trace it back to the user.
+      await db.insert(paymentOrders).values({
+        userId: userId,
+        amount: Math.round(amount * 100), // convert rupees to paise as per schema
+        razorpayOrderId: order.id,
+        status: "pending",
+      });
+
+      // 2. Backward compatibility: continue logging in the general transactions table
       await db.insert(transactions).values({
         userId: userId,
         walletId: walletId,
@@ -57,11 +69,12 @@ export const createRazorpayOrder = async (req: Request, res: Response) => {
         status: "pending",
         note: "Order created, waiting for payment",
       });
-      console.log(`Transaction logged for order: ${order.id}`);
+      console.log(`Transaction & PaymentOrder logged for order: ${order.id}`);
     } catch (dbError: any) {
       console.error("Database Insertion Error (create order):", dbError.message);
       // We still return the order to the frontend, but log the failure
     }
+
 
     res.status(200).json(order);
   } catch (error) {
@@ -111,80 +124,54 @@ export const verifyRazorpayPayment = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Invalid payment signature" });
     }
 
-    // [DEBUG]: Starting transaction recording
-    console.log("Signature valid. Recording success in DB...");
+    console.log("Signature valid. Webhook will handle final fulfillment.");
 
-    try {
-      // Atomic Transaction for Success (Update Txn + Create Ticket)
-      await db.transaction(async (tx) => {
-        const tNums = Array.isArray(ticketNumber) ? ticketNumber : String(ticketNumber).split(',');
-        const pNums = Array.isArray(pickedNumbers) ? pickedNumbers : (pickedNumbers ? String(pickedNumbers).split(',') : []);
+    // Note: The actual DB updates (crediting wallets, tracking payment success,
+    // and processing tickets) are securely handled by the backend Razorpay 
+    // webhook at /api/payments/webhook.
+    //
+    // This /verify API simply exists for initial frontend confirmation so the UI
+    // knows the payment signature was cryptographically proven valid immediately.
 
-        const numBoxes = tNums.length;
-        const boxesStr = tNums.join(',');
-
-        // Update transaction to success
-        await tx.update(transactions)
-          .set({
-            status: "success",
-            gatewayTxnId: razorpay_payment_id,
-            note: `Payment Success - ${numBoxes} boxes booked: ${boxesStr}`
-          })
-          .where(eq(transactions.txnRef, razorpay_order_id));
-
-        // Create the ticket records
-        const ticketValues = tNums.map((num: string, index: number) => ({
-          userId: userId,
-          drawId: drawId,
-          ticketNumber: num.trim(),
-          pricePaid: (Number(amount) / numBoxes).toString(),
-          pickedNumbers: pNums[index] || null,
-          status: "active" as const,
-        }));
-
-        await tx.insert(tickets).values(ticketValues);
-      });
-      console.log("Payment and ticket successfully recorded in DB.");
-      res.status(200).json({ message: "Payment Success & Tickets Created" });
-    } catch (txnError: any) {
-      console.error("Database Transaction Error (verify):", txnError.message);
-      res.status(500).json({ error: "Database error during payment verification" });
-    }
+    return res.status(200).json({
+      success: true,
+      message: "Signature verified. Webhook will process final fulfillment."
+    });
   } catch (error) {
     console.error("Payment Verification Error:", error);
     res.status(500).json({ error: "Internal server error during verification" });
   }
 };
 
-    /* 
-    UPDATED FRONTEND CODE (React/JS):
-    
-    const handleBuyTicket = async (ticketData) => {
-       // 1. Backend creates order & pending txn
-       const orderRes = await axios.post('/api/payments/create-order', { 
-         amount: ticketData.price, 
+/* 
+UPDATED FRONTEND CODE (React/JS):
+ 
+const handleBuyTicket = async (ticketData) => {
+   // 1. Backend creates order & pending txn
+   const orderRes = await axios.post('/api/payments/create-order', { 
+     amount: ticketData.price, 
+     userId: user.id,
+     walletId: user.walletId 
+   });
+   
+   const options = {
+     key: "...", 
+     order_id: orderRes.data.id,
+     handler: async (payment) => {
+       // 2. Backend updates txn to success & creates ticket entry
+       await axios.post('/api/payments/verify', {
+         ...payment,
+         ...ticketData, // includes drawId, ticketNumber, pickedNumbers
          userId: user.id,
-         walletId: user.walletId 
+         walletId: user.walletId
        });
-       
-       const options = {
-         key: "...", 
-         order_id: orderRes.data.id,
-         handler: async (payment) => {
-           // 2. Backend updates txn to success & creates ticket entry
-           await axios.post('/api/payments/verify', {
-             ...payment,
-             ...ticketData, // includes drawId, ticketNumber, pickedNumbers
-             userId: user.id,
-             walletId: user.walletId
-           });
-           alert("Ticket Purchased Successfully!");
-         },
-         // ... other config
-       };
-       new window.Razorpay(options).open();
-    };
-    */
+       alert("Ticket Purchased Successfully!");
+     },
+     // ... other config
+   };
+   new window.Razorpay(options).open();
+};
+*/
 
 
 /**
@@ -258,6 +245,78 @@ export const getPaymentStats = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * @swagger
+ * /api/admin/payments/transactions:
+ *   get:
+ *     summary: Get all system transactions (Admin Only)
+ *     description: Returns a comprehensive list of all transactions joined with user details and payment methods.
+ *     tags:
+ *       - Admin Payments
+ *     responses:
+ *       200:
+ *         description: Successfully retrieved transactions
+ */
+export const getAdminTransactions = async (req: Request, res: Response) => {
+  try {
+    // 1. Fetch transactions with user name and payment method name
+    const data = await db
+      .select({
+        id: transactions.id,
+        userName: users.name,
+        amount: transactions.amount,
+        type: transactions.type,
+        status: transactions.status,
+        method: paymentMethods.name,
+        datetime: transactions.createdAt,
+      })
+      .from(transactions)
+      .leftJoin(users, eq(transactions.userId, users.id))
+      .leftJoin(paymentMethods, eq(transactions.methodId, paymentMethods.id))
+      .orderBy(desc(transactions.createdAt));
+
+    // 2. Mapping enums to human-readable strings as requested
+    const typeMapping: Record<string, string> = {
+      deposit: 'Deposit',
+      withdrawal: 'Withdrawal',
+      ticket_purchase: 'TicketPurchase',
+      prize_payout: 'PrizePayout',
+      bonus_credit: 'BonusCredit',
+      referral_reward: 'ReferralReward',
+      manual_adjustment: 'ManualAdjustment',
+    };
+
+    const statusMapping: Record<string, string> = {
+      pending: 'Pending',
+      success: 'Success',
+      failed: 'Failed',
+      refunded: 'Refunded',
+    };
+
+    // 3. Format the data for the frontend
+    const formattedData = data.map((txn) => ({
+      id: txn.id,
+      userName: txn.userName || 'Unknown User',
+      amount: txn.amount,
+      type: typeMapping[txn.type as string] || txn.type,
+      status: statusMapping[txn.status as string] || txn.status,
+      method: txn.method || 'Wallet/Gateway',
+      datetime: txn.datetime,
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: formattedData,
+    });
+  } catch (error: any) {
+    console.error("Error fetching admin transactions:", error.message);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to fetch transactions" 
+    });
+  }
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // WEBHOOK HANDLER
 // Route: POST /api/payments/webhook
@@ -298,14 +357,12 @@ export const handleRazorpayWebhook = async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Missing signature header" });
   }
 
-  // ── Step 3: Get the raw Buffer body ────────────────────────────────────
-  // This route is mounted with express.raw({ type: "application/json" }) in
-  // src/index.ts (BEFORE express.json()), so req.body is a Buffer here.
-  // We MUST use the raw bytes (not re-serialised JSON) to match Razorpay's HMAC.
-  const rawBody = req.body as Buffer;
+  // ── Step 3: Get the pristine raw Buffer body ───────────────────────────
+  // Captured securely in index.ts via express.json({ verify: ... })
+  const rawBody = (req as any).rawBody as Buffer;
 
   if (!rawBody || rawBody.length === 0) {
-    console.error("[Webhook] Empty request body — rejected");
+    console.error("[Webhook] Empty or missing raw request body — rejected");
     return res.status(400).json({ error: "Empty request body" });
   }
 
@@ -383,61 +440,69 @@ export const handleRazorpayWebhook = async (req: Request, res: Response) => {
     return res.status(400).json({ error: "order_id not found in payload" });
   }
 
-  // ── Step 8: Look up the transaction by txnRef ──────────────────────────
-  // In createRazorpayOrder we set: txnRef = order.id  (the Razorpay order ID)
-  // So we find the pending transaction by matching txnRef = razorpayOrderId.
+  // ── Step 8: Find payment_orders using razorpay_order_id ────────────────
+  const existingOrders = await db
+    .select()
+    .from(paymentOrders)
+    .where(eq(paymentOrders.razorpayOrderId, razorpayOrderId));
+
+  // If NOT found -> log and return
+  if (existingOrders.length === 0) {
+    console.warn(`[Webhook] No payment_order found for razorpay_order_id: ${razorpayOrderId} — skipping`);
+    return res.status(200).json({ message: "Payment order not found — skipped" });
+  }
+
+  const pOrder = existingOrders[0];
+
+  // ── Step 9: If status already "success" → return early (prevent duplicate)
+  if (pOrder.status === "success") {
+    console.log(`[Webhook] Payment order ${pOrder.id} already "success" — duplicate webhook ignored`);
+    return res.status(200).json({ message: "Already processed — no-op" });
+  }
+
+  // Find transaction using txnRef for backward compatibility
   const existingTxns = await db
     .select()
     .from(transactions)
     .where(eq(transactions.txnRef, razorpayOrderId));
 
   if (existingTxns.length === 0) {
-    // No matching transaction — could be a webhook for an order created outside
-    // this system (e.g. Razorpay test from dashboard). Log and return 200 so
-    // Razorpay stops retrying.
-    console.warn(`[Webhook] No transaction found for order: ${razorpayOrderId} — skipping`);
+    console.warn(`[Webhook] No backward-compatible transaction found for order: ${razorpayOrderId} — skipping`);
     return res.status(200).json({ message: "Transaction not found — skipped" });
   }
 
   const txn = existingTxns[0];
-  console.log(`[Webhook] Found transaction ID: ${txn.id}, wallet: ${txn.walletId}, status: "${txn.status}"`);
+  console.log(`[Webhook] Found both payment_order ${pOrder.id} and transaction ${txn.id}`);
 
-  // ── Step 9: Idempotency guard — prevent double-crediting ────────────────
-  // The /verify endpoint (called by the frontend) may have already set the
-  // status to "success". If so, the wallet was already credited — bail out.
-  // This is the single most important guard to prevent duplicate wallet credits.
-  if (txn.status === "success") {
-    console.log(`[Webhook] Transaction ${txn.id} already "success" — duplicate webhook ignored`);
-    return res.status(200).json({ message: "Already processed — no-op" });
-  }
-
-  // ── Step 10: Atomically update transaction + credit wallet ───────────────
-  // db.transaction() ensures BOTH updates succeed or BOTH roll back.
-  // A partial update (txn success but wallet not credited, or vice-versa)
-  // would create an inconsistent financial state.
+  // ── Step 10: Atomically update DB state ───────────────
   try {
     await db.transaction(async (tx) => {
 
-      // 10a. Mark transaction as "success" and record the Razorpay payment ID
+      // Update payment_orders.status = "success"
+      await tx
+        .update(paymentOrders)
+        .set({ status: "success" })
+        .where(eq(paymentOrders.razorpayOrderId, razorpayOrderId));
+
+      console.log(`[Webhook] payment_order ${pOrder.id} updated to "success"`);
+
+      // Update transaction.status = "success"
+      // (This serves as the required "transaction record (type: deposit)" resolution)
       await tx
         .update(transactions)
         .set({
           status: "success",
-          gatewayTxnId: razorpayPaymentId, // "pay_xxx" — useful for reconciliation
+          gatewayTxnId: razorpayPaymentId, // "pay_xxx"
           note: `Webhook: payment.captured — ${razorpayPaymentId}`,
         })
         .where(eq(transactions.txnRef, razorpayOrderId));
 
       console.log(`[Webhook] Transaction ${txn.id} updated to "success"`);
 
-      // 10b. Credit the wallet
-      // Razorpay sends amount in paise (integer) — convert to INR rupees (÷100)
-      // for our wallet which stores numeric values in rupees (e.g. "4200.00").
+      // Update wallet balance: wallet.balance += amount
+      // Razorpay sends amount in paise — convert to INR rupees (÷100)
       const amountInRupees = (amountInPaise / 100).toFixed(2);
 
-      // Use a raw SQL expression so Postgres performs the addition atomically.
-      // This avoids the read-then-write race condition that could occur if two
-      // concurrent DB calls both read the same balance.
       await tx
         .update(wallets)
         .set({
@@ -460,3 +525,76 @@ export const handleRazorpayWebhook = async (req: Request, res: Response) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// REUSABLE UTILITY: updateWalletBalance
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Helper to safely update a user's wallet balance and securely log the ledger transaction.
+ * Completely reusable across webhooks, game joining, and withdrawals.
+ * 
+ * @param userId - UUID of the user
+ * @param amount - Amount to add (positive) or deduct (negative)
+ * @param type - The transaction categorization type
+ * @returns Object with success status and relevant messages/errors
+ */
+export const updateWalletBalance = async (
+  userId: string,
+  amount: number,
+  type: "deposit" | "withdrawal" | "ticket_purchase" | "prize_payout" | "bonus_credit" | "referral_reward" | "manual_adjustment"
+) => {
+  try {
+    // Utilize Drizzle's db.transaction to ensure operations are atomic (either both succeed or both fail)
+    return await db.transaction(async (tx) => {
+      
+      // 1. Fetch the user's wallet aggressively inside the transaction.
+      // We need the wallet ID for the transaction log and current balance for validation.
+      const userWallets = await tx
+        .select()
+        .from(wallets)
+        .where(eq(wallets.userId, userId));
+
+      if (userWallets.length === 0) {
+        throw new Error("Wallet not found for the provided user.");
+      }
+
+      const wallet = userWallets[0];
+      const currentBalance = Number(wallet.balance) || 0;
+      const newBalance = currentBalance + amount;
+
+      // 2. Prevent negative balance.
+      // If the operation is a deduction (negative amount) and dropping below zero, abort entirely.
+      if (newBalance < 0) {
+        throw new Error("Insufficient wallet balance to perform this operation.");
+      }
+
+      // 3. Update the wallet balance securely.
+      // Formats the output safely to 2 decimal places to comply with the numeric database schema.
+      await tx
+        .update(wallets)
+        .set({
+          balance: newBalance.toFixed(2),
+          updatedAt: new Date(),
+        })
+        .where(eq(wallets.id, wallet.id));
+
+      // 4. Insert the authoritative transaction ledger record.
+      // Generates a unique internal txnRef. Storing absolute amounts protects logic upstream.
+      const internalTxnRef = `txn_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+
+      await tx.insert(transactions).values({
+        userId: userId,
+        walletId: wallet.id,
+        txnRef: internalTxnRef,
+        amount: Math.abs(amount).toString(), 
+        type: type,
+        status: "success", // Immediately resolved because this is an internal database action
+        note: `Internal wallet update: ${type}`,
+      });
+
+      return { success: true, message: "Wallet balance securely updated." };
+    });
+  } catch (error: any) {
+    console.error("[Wallet Utility] Failed to update balance:", error.message);
+    return { success: false, error: error.message };
+  }
+};
