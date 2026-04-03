@@ -3,7 +3,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 
-// ✅ Swagger imports (FIXED)
+// Swagger
 import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
 
@@ -13,15 +13,16 @@ import paymentRoutes from "./api/routes/payment.routes";
 import authRoutes from "./api/routes/auth.routes";
 import userRoutes from "./api/routes/user.routes";
 import adminRoutes from "./api/routes/admin.route";
+import revenueRoutes from "./api/routes/revenue.routes";
+import referralRoutes from "./api/routes/referral.routes";
 import ticketRoutes from "./api/routes/ticket.routes";
 
 dotenv.config();
 
 
+import walletRoutes from "./api/routes/wallet.routes";
 
 const app = express();
-
-// ✅ CORS
 app.use(
   cors({
     origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -29,11 +30,10 @@ app.use(
     credentials: true,
   })
 );
-
-// ✅ Middleware
 app.use(express.json());
+app.use(cookieParser());   // ✅ IMPORTANT FIX
 
-// ✅ Swagger
+// Swagger
 const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
@@ -44,8 +44,7 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: "http://localhost:10000", // ✅ FIXED PORT
-        description: "Local server",
+        url: "http://localhost:10000",
       },
     ],
   },
@@ -56,7 +55,6 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// ✅ Test route
 app.get("/", (req, res) => {
   res.send("API is running 🚀");
 });
@@ -76,12 +74,12 @@ app.use("/api", levelRoutes); // ✅ NEW: Level Game Routes
 app.use("/api/payments", paymentRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/referral", referralRoutes);
 app.use("/api/tickets", ticketRoutes);
+app.use("/api", walletRoutes);
 
-// ✅ Port setup
 const PORT = process.env.PORT || 10000;
 
-// ✅ Start server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
