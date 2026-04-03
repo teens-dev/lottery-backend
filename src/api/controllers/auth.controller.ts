@@ -152,6 +152,7 @@ export const register = async (
     return res.status(500).json({
       success:false,
       message: "Registration failed",
+      error: error instanceof Error ? error.message : String(error)
     });
 
   }
