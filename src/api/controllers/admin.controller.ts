@@ -237,12 +237,36 @@ export const adminLogin = async (req: Request, res: Response) => {
 
 export const getAdminProfile = async (req: AuthRequest, res: Response) => {
   try {
+    const adminId = req.user?.id;
+
+    const adminData = await db
+      .select({
+        id: admins.id,
+        name: admins.name,
+        email: admins.email,
+        isActive: admins.isActive,
+        role: adminRoles.name,
+        permissions: adminRoles.permissions,
+        createdAt: admins.createdAt,
+      })
+      .from(admins)
+      .innerJoin(adminRoles, eq(admins.roleId, adminRoles.id))
+      .where(eq(admins.id, adminId));
+
+    if (!adminData.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found",
+      });
+    }
+
     return res.status(200).json({
       success: true,
-      message: "Admin authorized",
-      user: req.user,
+      user: adminData[0],
     });
+
   } catch (error) {
+    console.error("Profile error:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",

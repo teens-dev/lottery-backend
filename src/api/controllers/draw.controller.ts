@@ -3,7 +3,8 @@ import { db } from "../../db/index";
 import { draws, gameTypes, tickets } from "../../db/schema";
 import { eq, desc, SQL } from "drizzle-orm";
 import { drawStatusEnum } from "../../db/schema";
-
+import { sendEmail } from "../utils/mailer";
+import { getAllAdminEmails } from "../utils/getAdmins";
 /**
  * @swagger
  * /api/create-draw:
@@ -144,24 +145,47 @@ export const createDraw = async (req: Request, res: Response) => {
         minEntries: min_entries
       })
       .returning();
+      // 🔔 Send email to admins (non-blocking)
+ try {
+      const adminEmails = await getAllAdminEmails();
 
-    res.status(201).json({
+      console.log("📧 Admin Emails:", adminEmails);
+
+      if (adminEmails.length > 0) {
+        await sendEmail(
+          adminEmails,
+          "🎰 New Draw Created",
+          `
+            <h2>New Draw Created</h2>
+            <p><b>Name:</b> ${name}</p>
+            <p><b>Prize Pool:</b> ${prize_pool}</p>
+            <p><b>Draw Date:</b> ${draw_date}</p>
+          `
+        );
+
+        console.log("✅ Email sent successfully");
+      } else {
+        console.log("⚠️ No admin emails found");
+      }
+
+    } catch (emailError) {
+      console.error("❌ Email error:", emailError);
+    }
+
+    // ✅ SUCCESS RESPONSE
+    return res.status(201).json({
       success: true,
       data: newDraw
     });
 
-  } catch (error)
-  {
+  } catch (error) {
+    console.error("❌ Create draw error:", error);
 
-    console.error(error);
-
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to create draw"
     });
-
   }
-
 };
 
 /**
