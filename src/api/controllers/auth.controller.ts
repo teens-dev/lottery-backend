@@ -4,6 +4,7 @@ import jwt, { SignOptions } from "jsonwebtoken";
 import { db } from "../../db/db";
 import { users } from "../../db/schema";
 import { eq } from "drizzle-orm";
+import { sendWelcomeEmail } from "../../utils/sendEmail";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
@@ -67,6 +68,11 @@ export const register = async (
       });
 
     const user = insertedUser[0];
+
+    /* ✅ Send Welcome Email (Non-blocking) */
+    sendWelcomeEmail(user.email, user.name).catch(err =>
+      console.error("Email Error:", err)
+    );
 
     const token = jwt.sign(
       { id: user.id },
