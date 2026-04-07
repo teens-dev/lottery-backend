@@ -1,4 +1,5 @@
 import { Router } from "express";
+
 import {
   getUsers,
   getUsersWithCount,
@@ -7,12 +8,6 @@ import {
 
 const router = Router();
 
-router.get("/", getUsersWithCount);
-
-
-
-
-
 // GET /api/users/count
 router.get("/", getUsersWithCount);
 
@@ -20,6 +15,6 @@ router.get("/", getUsersWithCount);
 router.get("/users", getUsers);
 
 // GET Single User
-router.get("/users/:id", getUserById);
+router.get("/:id", getUserById);
 
 export default router;
