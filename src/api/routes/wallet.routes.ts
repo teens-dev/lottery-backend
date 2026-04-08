@@ -1,9 +1,13 @@
 import express from "express";
-import { getAllWallets } from "../controllers/wallet.controller";
+import { getAllWallets, requestWithdrawal, approveWithdrawal } from "../controllers/wallet.controller";
 
 const router = express.Router();
 
-// ✅ SINGLE CLEAN ROUTE
+// ✅ GET ALL WALLETS (ADMIN)
 router.get("/admin/wallets", getAllWallets);
+
+// ✅ WITHDRAWAL SYSTEM
+router.post("/withdraw", requestWithdrawal);
+router.post("/admin/approve-withdraw", approveWithdrawal);
 
 export default router;

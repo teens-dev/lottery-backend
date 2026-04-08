@@ -178,7 +178,7 @@ For a comprehensive example of documenting request bodies and nested JSON respon
 
 ---
 
-## 🗄️ Database Schema — All 34 Tables
+## 🗄️ Database Schema — All 39 Tables
 
 The schema is split into 4 tiers based on dependency order. Tables in each tier depend only on tables from previous tiers.
 
@@ -855,6 +855,54 @@ Tracks the complete payout lifecycle for each draw winner.
 
 ---
 
+## 🟪 TIER 5 — Payment Tables
+
+> Dedicated tables for the **Razorpay payment order lifecycle** and **user bank/UPI details**. They sit alongside Tier 4 but are scoped purely to payment operations.
+
+---
+
+### 38. `payment_orders`
+
+Tracks every Razorpay order created when a user initiates a wallet top-up or game-entry payment. One row = one `order_xxx` object at Razorpay.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | uuid PK | Unique internal order ID (auto-generated UUID) |
+| `user_id` | uuid FK → users | The user who initiated this payment |
+| `amount` | integer | Amount in **paise** (smallest INR unit). ₹499 → `49900`. Integer avoids float issues |
+| `razorpay_order_id` | varchar(100) UNIQUE | Razorpay's `order_xxx` identifier — used to match webhook callbacks and verify payment |
+| `status` | enum | `pending` → order created, awaiting payment · `success` → captured · `failed` → declined |
+| `created_at` | timestamp | When the order row was created in our system |
+
+**Indexes:** `user_id`, `razorpay_order_id`, `status`  
+**Relations:** FK to `users`  
+**How it fits with `transactions`:**  
+`payment_orders.razorpay_order_id` stores `order_xxx` (created *before* payment).  
+`transactions.gateway_txn_id` stores `pay_xxx` (captured *after* payment).  
+They are complementary — `payment_orders` fills the pre-payment gap that `transactions` doesn't cover.
+
+---
+
+### 39. `user_bank_accounts`
+
+Stores bank account and UPI details submitted by users for withdrawal processing. A single user may have multiple accounts; only `is_verified = true` accounts are eligible for payouts.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | uuid PK | Unique internal record ID |
+| `user_id` | uuid FK → users | The user who owns this bank account |
+| `account_number` | varchar(25) | Bank account number (stored as string to preserve leading zeros and handle all Indian formats) |
+| `ifsc` | varchar(15) | IFSC code of the bank branch — format: 4 alpha + `0` + 6 alphanumeric (e.g. `SBIN0001234`) |
+| `upi_id` | varchar(100) | UPI Virtual Payment Address / VPA (e.g. `user@upi`). Optional — user may provide bank-only or UPI-only |
+| `is_verified` | boolean | Whether verified by platform (penny-drop or manual admin review). Only `true` accounts can receive withdrawals |
+| `created_at` | timestamp | When the bank account record was first added |
+
+**Indexes:** `user_id`, `(user_id, is_verified)`  
+**Relations:** FK to `users`  
+**Relation to `withdrawals`:** `withdrawals` logs each payout event; `user_bank_accounts` stores the verified destination details referenced when processing a withdrawal.
+
+---
+
 ## 🔗 Table Relationships — Visual Map
 
 ``` 
@@ -882,6 +930,11 @@ users ──── points_history ──── points_rules ──── game_ty
 users ──── user_badges
 users ──── user_sessions
 users ──── kyc_submissions
+users ──── payment_orders          (order_xxx → pre-payment stage)
+users ──── user_bank_accounts      (verified bank/UPI → withdrawal destination)
+
+payment_orders.status: pending → success  (webhook updates after pay_xxx captured)
+transactions.gateway_txn_id = pay_xxx     (post-payment record)
 ```
 
 ---
@@ -897,6 +950,8 @@ users ──── kyc_submissions
 | `notifications_sent` | 50,000,000 | Bulk campaigns |
 | `user_sessions` | 2,000,000 | Active sessions |
 | `audit_logs` | 500,000 | Admin actions |
+| `payment_orders` | 5,000,000 | One per Razorpay order initiated |
+| `user_bank_accounts` | 2,000,000 | ~2 accounts per active user |
 | Master tables | < 1,000 each | Static reference data |
 
 ---
@@ -951,6 +1006,11 @@ The seed file must insert rows in this exact order to satisfy foreign key constr
 32. audit_logs           (needs: admins)
 33. user_sessions        (needs: users)
 34. prize_payouts        (needs: draw_winners, wallets, transactions)
+35. level_pools          (needs: game_types)
+36. level_entries        (needs: users, game_types, level_pools)
+37. withdrawals          (needs: users)
+38. payment_orders       (needs: users)
+39. user_bank_accounts   (needs: users)
 ```
 
 ---
@@ -1095,3 +1155,28 @@ JWT_SECRET=22acf41ebb7d622101279e4e543489c60b05e591878a87398ab225b20d343e8a62c22
 EMAIL_USER=gkmurthy2312@gmail.com
 EMAIL_PASS=pfco wufq xebr awxu
 
+ ----------------------------------------Payments---------------------------
+
+ What was added / changed
+File	Change
+payment.controller.ts	Appended handleRazorpayWebhook export — zero changes to existing functions
+payment.routes.ts	Added /webhook route with express.raw() middleware, declared first in the router
+.env	Added RAZORPAY_WEBHOOK_SECRET placeholder
+How the webhook flow works
+Razorpay POST /api/payments/webhook
+  │
+  ├─ express.raw() → req.body = Buffer  ← raw bytes preserved for HMAC
+  │
+  ├─ [Step 2] Check X-Razorpay-Signature header exists
+  ├─ [Step 4] HMAC SHA256(rawBody, RAZORPAY_WEBHOOK_SECRET) === header value?
+  │           No → 400 rejected
+  ├─ [Step 6] event !== "payment.captured" → 200 ignored
+  ├─ [Step 8] Find transaction WHERE txnRef = razorpay_order_id
+  ├─ [Step 9] txn.status === "success"? → 200 no-op  ← idempotency guard
+  └─ [Step 10] db.transaction():
+        ├─ UPDATE transactions SET status="success", gatewayTxnId="pay_xxx"
+        └─ UPDATE wallets SET balance = balance + amountInRupees  ← atomic SQL
+One thing you must do
+Go to Razorpay Dashboard → Settings → Webhooks → add https://your-domain.com/api/payments/webhook → copy the Webhook Secret → paste it into .env as RAZORPAY_WEBHOOK_SECRET.
+
+RAZORPAY_WEBHOOK_SECRET="your_razorpay_webhook_secret_here"

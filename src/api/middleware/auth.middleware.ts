@@ -10,7 +10,8 @@ export const protect = (
   res: Response,
   next: NextFunction
 ) => {
-  const token = req.cookies?.token;
+  const token = req.cookies?.admin_token;
+  console.log(token, "here is the token")
 
   if (!token) {
     return res.status(401).json({
