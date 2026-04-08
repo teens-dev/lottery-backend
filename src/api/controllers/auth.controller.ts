@@ -75,7 +75,10 @@ export const register = async (
     );
 
     const token = jwt.sign(
-      { id: user.id },
+      { 
+        id: user.id,
+        role: "user" // Default role for new registrations
+      },
       JWT_SECRET,
       JWT_OPTIONS
     );
@@ -152,7 +155,10 @@ export const login = async (
     }
 
     const token = jwt.sign(
-      { id: user.id },
+      { 
+        id: user.id,
+        role: user.role // Include the actual role from the DB (e.g., 'user', 'admin', etc.)
+      },
       JWT_SECRET,
       JWT_OPTIONS
     );
