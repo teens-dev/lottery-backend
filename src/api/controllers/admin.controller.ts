@@ -136,12 +136,14 @@ export const createAdmin = async (req: Request, res: Response) => {
 
 export const adminLogin = async (req: Request, res: Response) => {
   try {
+    console.log("ADMIN LOGIN ATTEMPT 👉", req.body);
     const validated = adminLoginSchema.safeParse(req.body);
 
     if (!validated.success) {
       return res.status(400).json({
         success: false,
         message: "Validation failed",
+        errors: validated.error.flatten().fieldErrors,
       });
     }
 
