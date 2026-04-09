@@ -1,5 +1,5 @@
 import { db } from "../../db";
-import { wallets, users, transactions } from "../../db/schema";
+import { wallets, users, transactions, tickets } from "../../db/schema";
 import { eq, desc } from "drizzle-orm";
 import { Request, Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
@@ -67,6 +67,9 @@ export const getUserWallet = async (
   res: Response
 ) => {
   try {
+    // 1. Disable Aggressive Browser Caching (Fixes 304 Not Modified issue during polling)
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+
     // Priority: Query param (for polling support) or Auth token
     const userId = (req.query.userId as string) || req.user?.id;
 
@@ -78,18 +81,24 @@ export const getUserWallet = async (
       });
     }
 
-    const wallet = await db
+    let wallet = await db
       .select()
       .from(wallets)
       .where(eq(wallets.userId, userId))
       .limit(1);
 
+    // 2. RESILIENT PROVISIONING: Create wallet if missing (legacy users or broken registrations)
     if (!wallet.length) {
-      return res.status(404).json({
-        success: false,
-        error: "Wallet not found",
-        message: "Wallet not found",
-      });
+      console.log(`[Wallet] Provisioning missing wallet row on-demand for user ${userId}`);
+      const [newWallet] = await db
+        .insert(wallets)
+        .values({
+          userId: userId,
+          balance: "0.00",
+          lockedAmount: "0.00",
+        })
+        .returning();
+      wallet = [newWallet];
     }
 
     res.json({
@@ -136,5 +145,73 @@ export const getUserTransactions = async (
       success: false,
       message: "Failed to fetch transactions",
     });
+  }
+};
+
+// ✅ PAY WITH WALLET (Unified Flow)
+export const payWithWallet = async (req: AuthRequest, res: Response) => {
+  const { drawId, ticketNumbers, totalAmount } = req.body;
+  const userId = req.user?.id;
+
+  if (!userId) {
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      // 1. Get Wallet
+      const [userWallet] = await tx
+        .select()
+        .from(wallets)
+        .where(eq(wallets.userId, userId));
+
+      if (!userWallet) {
+        throw new Error("Wallet not found. Please try again.");
+      }
+
+      const balance = Number(userWallet.balance);
+      if (balance < totalAmount) {
+        throw new Error(`Insufficient balance. Available: ₹${balance}, Required: ₹${totalAmount}`);
+      }
+
+      // 2. Deduct Balance
+      const newBalance = balance - totalAmount;
+      await tx
+        .update(wallets)
+        .set({ balance: newBalance.toFixed(2), updatedAt: new Date() })
+        .where(eq(wallets.id, userWallet.id));
+
+      // 3. Create Tickets
+      // ticketNumbers is a comma-separated string from frontend
+      const ticketNumbersArray = ticketNumbers.split(",").map((s: string) => s.trim());
+      const singleTicketPrice = totalAmount / ticketNumbersArray.length;
+
+      for (const num of ticketNumbersArray) {
+        await tx.insert(tickets).values({
+          userId,
+          drawId,
+          ticketNumber: num,
+          pricePaid: singleTicketPrice.toFixed(2),
+          pickedNumbers: num,
+          status: "active",
+        });
+      }
+
+      // 4. Log Transaction
+      await tx.insert(transactions).values({
+        userId,
+        walletId: userWallet.id,
+        txnRef: `WLT-${crypto.randomBytes(8).toString("hex").toUpperCase()}`,
+        amount: totalAmount.toFixed(2),
+        type: "ticket_purchase",
+        status: "success",
+        note: `Wallet Purchase: Draw ${drawId}`,
+      });
+    });
+
+    res.json({ success: true, message: "Tickets purchased successfully via wallet!" });
+  } catch (error: any) {
+    console.error("Wallet Pay Error:", error.message);
+    res.status(400).json({ success: false, message: error.message || "Payment failed" });
   }
 };

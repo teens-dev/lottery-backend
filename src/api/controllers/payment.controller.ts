@@ -18,12 +18,14 @@ const razorpay = new Razorpay({
  *     summary: Create a Razorpay order and log pending transaction
  *     tags: [Payments]
  */
-export const createRazorpayOrder = async (req: Request, res: Response) => {
+export const createRazorpayOrder = async (req: any, res: Response) => {
   try {
-    const { amount, currency = "INR", userId, walletId } = req.body;
+    const { amount, currency = "INR" } = req.body;
+    const userId = req.user?.id;
+    const walletId = req.user?.walletId;
 
     // [DEBUG]: Log incoming request data
-    console.log("Creating Order - Request Body:", req.body);
+    console.log("Creating Order - Request Body:", req.body, "User ID:", userId, "Wallet ID:", walletId);
 
     // Validation for UUID format (standard UUID v4 regex)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -90,22 +92,23 @@ export const createRazorpayOrder = async (req: Request, res: Response) => {
  *     summary: Verify payment, update transaction status, and create ticket
  *     tags: [Payments]
  */
-export const verifyRazorpayPayment = async (req: Request, res: Response) => {
+export const verifyRazorpayPayment = async (req: any, res: Response) => {
   try {
     const {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
-      userId,
       amount,
       drawId,
       ticketNumber,
       pickedNumbers,
-      walletId
     } = req.body;
 
+    const userId = req.user?.id;
+    const walletId = req.user?.walletId;
+
     // [DEBUG]: Log incoming verification data
-    console.log("Verifying Payment - Request Body:", req.body);
+    console.log("Verifying Payment - Request Body:", req.body, "User ID:", userId, "Wallet ID:", walletId);
 
     // 1. Signature Verification
     const body = razorpay_order_id + "|" + razorpay_payment_id;
@@ -129,12 +132,19 @@ export const verifyRazorpayPayment = async (req: Request, res: Response) => {
     // 2. Fulfillment Logic (Mirroring Webhook for immediate UI feedback)
     try {
       await db.transaction(async (tx) => {
-        // [0] Idempotency Check
+        // [0] Idempotency Check & Secure Amount Fetch
         const existingOrder = await tx.select().from(paymentOrders).where(eq(paymentOrders.razorpayOrderId, razorpay_order_id));
-        if (existingOrder.length > 0 && existingOrder[0].status === "success") {
+        if (existingOrder.length === 0) {
+          throw new Error(`Order ${razorpay_order_id} not found in database.`);
+        }
+        
+        if (existingOrder[0].status === "success") {
           console.log(`[Verify] Order ${razorpay_order_id} already marked success (Idempotency).`);
           return;
         }
+
+        const exactAmountInPaise = existingOrder[0].amount;
+        const amountToAddInRupees = Number((exactAmountInPaise / 100).toFixed(2));
 
         // [A] Update payment_orders
         await tx.update(paymentOrders)
@@ -150,22 +160,37 @@ export const verifyRazorpayPayment = async (req: Request, res: Response) => {
           })
           .where(eq(transactions.txnRef, razorpay_order_id));
 
-        // [C] Credit Wallet
-        if (amount && walletId) {
-          const userWallets = await tx.select().from(wallets).where(eq(wallets.id, walletId));
+        // [C] Credit Wallet ONLY FOR DEPOSITS (No drawId)
+        // If drawId is present, it's a ticket purchase, so we don't credit the wallet balance.
+        if (!drawId) {
+          let targetWalletId = walletId;
+          const userWallets = await tx.select().from(wallets).where(eq(wallets.userId, userId));
+          
           if (userWallets.length > 0) {
+            targetWalletId = userWallets[0].id;
             const currentBalance = Number(userWallets[0].balance) || 0;
-            const newBalance = currentBalance + Number(amount);
+            const newBalance = currentBalance + amountToAddInRupees;
             
             await tx.update(wallets)
               .set({
                 balance: newBalance.toFixed(2),
                 updatedAt: new Date(),
               })
-              .where(eq(wallets.id, walletId));
+              .where(eq(wallets.id, targetWalletId));
             
-            console.log(`[Verify Success] Wallet ${walletId} credited ₹${Number(amount)}`);
+            console.log(`[Verify Success] DEPOSIT: Wallet ${targetWalletId} credited ₹${amountToAddInRupees}`);
+          } else {
+            console.log(`[Verify] Wallet missing for deposit. Creating for user ${userId}.`);
+            const [newWallet] = await tx.insert(wallets).values({
+              userId: userId,
+              balance: amountToAddInRupees.toFixed(2),
+              lockedAmount: "0.00"
+            }).returning({ id: wallets.id });
+            
+            console.log(`[Verify Success] DEPOSIT: New Wallet ${newWallet.id} created and credited ₹${amountToAddInRupees}`);
           }
+        } else {
+          console.log(`[Verify Success] PURCHASE: Ticket(s) issued for Draw ${drawId}. No wallet credit needed.`);
         }
       });
 

@@ -1,22 +1,25 @@
 import express from "express";
-import { 
+import {
   getAllWallets,
   getUserWallet,
-  getUserTransactions
+  getUserTransactions,
+  payWithWallet
 } from "../controllers/wallet.controller";
 
-import { protect } from "../middleware/admin.middleware";
+import { protect } from "../middleware/auth.middleware";
+import { adminOnly } from "../middleware/admin.middleware";
 
 const router = express.Router();
 
 // ADMIN
-router.get("/admin/wallets", getAllWallets);
+router.get("/admin/all", protect, adminOnly, getAllWallets);
 
 // USER WALLET
-router.get("/wallet", protect, getUserWallet);
+router.get("/", protect, getUserWallet);
+router.post("/pay", protect, payWithWallet);
 
 // USER TRANSACTIONS
-router.get("/wallet/transactions", protect, getUserTransactions);
+router.get("/transactions", protect, getUserTransactions);
 
 export default router;
 
