@@ -124,19 +124,64 @@ export const verifyRazorpayPayment = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Invalid payment signature" });
     }
 
-    console.log("Signature valid. Webhook will handle final fulfillment.");
+    console.log("Signature valid. Implementing instant fulfillment...");
 
-    // Note: The actual DB updates (crediting wallets, tracking payment success,
-    // and processing tickets) are securely handled by the backend Razorpay 
-    // webhook at /api/payments/webhook.
-    //
-    // This /verify API simply exists for initial frontend confirmation so the UI
-    // knows the payment signature was cryptographically proven valid immediately.
+    // 2. Fulfillment Logic (Mirroring Webhook for immediate UI feedback)
+    try {
+      await db.transaction(async (tx) => {
+        // [0] Idempotency Check
+        const existingOrder = await tx.select().from(paymentOrders).where(eq(paymentOrders.razorpayOrderId, razorpay_order_id));
+        if (existingOrder.length > 0 && existingOrder[0].status === "success") {
+          console.log(`[Verify] Order ${razorpay_order_id} already marked success (Idempotency).`);
+          return;
+        }
 
-    return res.status(200).json({
-      success: true,
-      message: "Signature verified. Webhook will process final fulfillment."
-    });
+        // [A] Update payment_orders
+        await tx.update(paymentOrders)
+          .set({ status: "success" })
+          .where(eq(paymentOrders.razorpayOrderId, razorpay_order_id));
+
+        // [B] Update Transactions
+        await tx.update(transactions)
+          .set({
+            status: "success",
+            gatewayTxnId: razorpay_payment_id,
+            note: `Verified: Frontend signature proven — ${razorpay_payment_id}`,
+          })
+          .where(eq(transactions.txnRef, razorpay_order_id));
+
+        // [C] Credit Wallet
+        if (amount && walletId) {
+          const userWallets = await tx.select().from(wallets).where(eq(wallets.id, walletId));
+          if (userWallets.length > 0) {
+            const currentBalance = Number(userWallets[0].balance) || 0;
+            const newBalance = currentBalance + Number(amount);
+            
+            await tx.update(wallets)
+              .set({
+                balance: newBalance.toFixed(2),
+                updatedAt: new Date(),
+              })
+              .where(eq(wallets.id, walletId));
+            
+            console.log(`[Verify Success] Wallet ${walletId} credited ₹${Number(amount)}`);
+          }
+        }
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Payment verified and wallet updated successfully."
+      });
+    } catch (fulfillmentError: any) {
+      console.error("Fulfillment Error (DB):", fulfillmentError.message);
+      // Even if DB fails, signature was valid. Returns 200 so UI doesn't panic; 
+      // Webhook will retry background fulfillment.
+      return res.status(200).json({
+        success: true,
+        message: "Signature verified. Webhook will handle final balance update."
+      });
+    }
   } catch (error) {
     console.error("Payment Verification Error:", error);
     res.status(500).json({ error: "Internal server error during verification" });
@@ -550,7 +595,7 @@ export const updateWalletBalance = async (
       // We need the wallet ID for the transaction log and current balance for validation.
       const userWallets = await tx
         .select()
-        .from(wallets)
+        .from(wallets)  
         .where(eq(wallets.userId, userId));
 
       if (userWallets.length === 0) {
