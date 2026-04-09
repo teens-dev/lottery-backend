@@ -67,7 +67,16 @@ export const getUserWallet = async (
   res: Response
 ) => {
   try {
-    const userId = req.user?.id;
+    // Priority: Query param (for polling support) or Auth token
+    const userId = (req.query.userId as string) || req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: "Not authorized",
+        message: "User ID missing"
+      });
+    }
 
     const wallet = await db
       .select()
@@ -78,6 +87,7 @@ export const getUserWallet = async (
     if (!wallet.length) {
       return res.status(404).json({
         success: false,
+        error: "Wallet not found",
         message: "Wallet not found",
       });
     }
@@ -93,6 +103,7 @@ export const getUserWallet = async (
 
     res.status(500).json({
       success: false,
+      error: "Internal server error",
       message: "Failed to fetch wallet",
     });
   }
