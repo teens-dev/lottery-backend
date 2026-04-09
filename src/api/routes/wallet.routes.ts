@@ -1,13 +1,22 @@
 import express from "express";
-import { getAllWallets, requestWithdrawal, approveWithdrawal } from "../controllers/wallet.controller";
+import { 
+  getAllWallets,
+  getUserWallet,
+  getUserTransactions
+} from "../controllers/wallet.controller";
+
+import { protect } from "../middleware/admin.middleware";
 
 const router = express.Router();
 
-// ✅ GET ALL WALLETS (ADMIN)
+// ADMIN
 router.get("/admin/wallets", getAllWallets);
 
-// ✅ WITHDRAWAL SYSTEM
-router.post("/withdraw", requestWithdrawal);
-router.post("/admin/approve-withdraw", approveWithdrawal);
+// USER WALLET
+router.get("/wallet", protect, getUserWallet);
+
+// USER TRANSACTIONS
+router.get("/wallet/transactions", protect, getUserTransactions);
 
 export default router;
+
