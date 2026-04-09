@@ -3,6 +3,7 @@ import { wallets, users, transactions } from "../../db/schema";
 import { eq, desc } from "drizzle-orm";
 import { Request, Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
+import crypto from "crypto";
 
 // ✅ GET ALL WALLETS (ADMIN)
 export const getAllWallets = async (req: Request, res: Response) => {

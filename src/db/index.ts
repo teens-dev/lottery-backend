@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
-import * as schema from './schema/index.ts';
+import * as schema from './schema/index';
 dotenv.config();
 
 const pool = new Pool({

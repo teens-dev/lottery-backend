@@ -1,9 +1,13 @@
-import { Router } from "express";
+import { Router, raw } from "express";
 import { 
   getPaymentStats, 
   createRazorpayOrder, 
-  verifyRazorpayPayment 
+  verifyRazorpayPayment,
+  handleRazorpayWebhook,
+  getAdminTransactions,
 } from "../controllers/payment.controller";
+import { protect } from "../middleware/auth.middleware";
+import { adminOnly } from "../middleware/admin.middleware";
 
 /**
  * Router: Payment Routes
@@ -20,9 +24,36 @@ const router = Router();
  */
 
 /**
- * GET /api/payments/stats
+ * POST /api/payments/webhook
+ *
+ * Razorpay webhook endpoint.
+ *
+ * CRITICAL: express.raw({ type: "application/json" }) is applied ONLY to this
+ * route. It captures the raw request bytes into req.body (a Buffer) BEFORE
+ * express.json() touches it. This is mandatory for HMAC signature verification.
+ *
+ * This route is declared FIRST so the raw-body middleware is registered before
+ * any JSON-parsing middleware that Express might apply later.
+ *
+ * Do NOT move this route below a router.use(express.json()) call.
  */
-router.get("/stats", getPaymentStats);
+router.post(
+  "/webhook",
+  raw({ type: "application/json" }), // ← raw Buffer body for HMAC verification
+  handleRazorpayWebhook
+);
+
+/**
+ * GET /api/payments/stats
+ * Admin only stats for the dashboard.
+ */
+router.get("/stats", protect, adminOnly, getPaymentStats);
+
+/**
+ * GET /api/payments/transactions
+ * Admin only transaction history.
+ */
+router.get("/transactions", protect, adminOnly, getAdminTransactions);
 
 /**
  * POST /api/payments/create-order

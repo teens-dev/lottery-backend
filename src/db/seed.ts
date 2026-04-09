@@ -572,15 +572,61 @@ async function seed() {
   });
 
   // ════════════════════════════════════════════
+  // TIER 5 — PAYMENT TABLES
+  // ════════════════════════════════════════════
+
+  // 38. payment_orders
+  // Represents a Razorpay order created when user1 topped up their wallet.
+  console.log('→ Seeding payment_orders...');
+  await db.insert(schema.paymentOrders).values([
+    {
+      userId: user1.id,
+      // ₹500 expressed in paise (smallest INR unit)
+      amount: 50000,
+      razorpayOrderId: 'order_SeedDemo001XYZ',
+      status: 'success',
+    },
+    {
+      userId: user2.id,
+      // ₹200 expressed in paise
+      amount: 20000,
+      razorpayOrderId: 'order_SeedDemo002ABC',
+      // pending — user initiated the order but hasn't completed payment
+      status: 'pending',
+    },
+  ]);
+
+  // 39. user_bank_accounts
+  // Stores the bank / UPI details users have added for withdrawals.
+  console.log('→ Seeding user_bank_accounts...');
+  await db.insert(schema.userBankAccounts).values([
+    {
+      userId: user1.id,
+      accountNumber: '123456789012',       // Ravi's savings account
+      ifsc: 'SBIN0001234',                 // State Bank of India branch IFSC
+      upiId: 'ravi@upi',                  // Linked UPI handle
+      isVerified: true,                    // Verified via penny-drop
+    },
+    {
+      userId: user2.id,
+      accountNumber: '987654321098',       // Priya's savings account
+      ifsc: 'HDFC0000123',                 // HDFC Bank branch IFSC
+      upiId: 'priya@oksbi',               // Priya's UPI handle
+      isVerified: false,                   // Not yet verified by admin
+    },
+  ]);
+
+  // ════════════════════════════════════════════
   // DONE
   // ════════════════════════════════════════════
-  console.log('\n✅ Seed complete! All 37 tables have at least 1 row.\n');
+  console.log('\n✅ Seed complete! All 39 tables have at least 1 row.\n');
   console.log('Summary:');
   console.log('  Independent tables : 8  rows inserted');
   console.log('  Core tables        : 10 rows inserted (+ 1 extra user for referral)');
   console.log('  Junction tables    : 6  rows inserted');
   console.log('  Dependent tables   : 13 rows inserted');
-  console.log('  Total              : 37+ rows across 37 tables');
+  console.log('  Payment tables     : 4  rows inserted (2 payment_orders + 2 user_bank_accounts)');
+  console.log('  Total              : 39+ rows across 39 tables');
 
   process.exit(0);
 }

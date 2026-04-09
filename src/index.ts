@@ -30,10 +30,14 @@ app.use(
     credentials: true,
   })
 );
-
-app.use(express.json());
-app.use(cookieParser()); // ✅ Required for cookies
-
+// ✅ Parse JSON globally, but crucially preserve the raw unparsed Buffer as 'req.rawBody'.
+// This completely guarantees Razorpay Webhook Signatures mathematically match!
+app.use(express.json({
+  verify: (req: any, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+app.use(cookieParser());   // ✅ IMPORTANT FIX
 
 // Swagger
 const swaggerOptions = {

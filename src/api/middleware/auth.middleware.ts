@@ -10,7 +10,12 @@ export const protect = (
   res: Response,
   next: NextFunction
 ) => {
-  const token = req.cookies?.token;
+  // ✅ Support both standard user tokens and admin dashboard tokens
+  const token = req.cookies?.admin_token || req.cookies?.token;
+  
+  if (req.cookies?.admin_token) {
+    console.log("[Auth] Admin token detected");
+  }
 
   if (!token) {
     return res.status(401).json({
