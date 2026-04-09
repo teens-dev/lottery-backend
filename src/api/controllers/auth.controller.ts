@@ -2,7 +2,7 @@ import type { Request as ExpressRequest, Response as ExpressResponse } from "exp
 import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { db } from "../../db/db";
-import { users, referralCodes, referrals } from "../../db/schema";
+import { users, referralCodes, referrals, wallets } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import { sendWelcomeEmail } from "../../utils/sendEmail";
 
@@ -206,10 +206,19 @@ export const login = async (
       });
     }
 
+    const userWallet = await db
+      .select({ id: wallets.id })
+      .from(wallets)
+      .where(eq(wallets.userId, user.id))
+      .limit(1);
+
+    const walletId = userWallet.length > 0 ? userWallet[0].id : null;
+
     const token = jwt.sign(
       { 
         id: user.id,
-        role: user.role // Include the actual role from the DB (e.g., 'user', 'admin', etc.)
+        role: user.role, // Include the actual role from the DB (e.g., 'user', 'admin', etc.)
+        walletId: walletId
       },
       JWT_SECRET,
       JWT_OPTIONS
