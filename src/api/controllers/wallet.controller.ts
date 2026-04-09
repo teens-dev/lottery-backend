@@ -1,12 +1,13 @@
 import { db } from "../../db";
-import { wallets, users } from "../../db/schema";
-import { eq } from "drizzle-orm";
+import { wallets, users, transactions } from "../../db/schema";
+import { eq, desc } from "drizzle-orm";
 import { Request, Response } from "express";
+import { AuthRequest } from "../middleware/auth.middleware";
+import crypto from "crypto";
 
 // ✅ GET ALL WALLETS (ADMIN)
 export const getAllWallets = async (req: Request, res: Response) => {
   try {
-    // ✅ JOIN USERS + WALLETS
     const data = await db
       .select({
         id: wallets.id,
@@ -27,7 +28,6 @@ export const getAllWallets = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ CALCULATIONS
     const totalBalance = data.reduce(
       (sum, w: any) => sum + Number(w.balance || 0),
       0
@@ -42,7 +42,6 @@ export const getAllWallets = async (req: Request, res: Response) => {
       0
     );
 
-    // ✅ FINAL RESPONSE
     res.json({
       success: true,
       totalBalance,
@@ -57,6 +56,74 @@ export const getAllWallets = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch wallets",
+    });
+  }
+};
+
+
+// ✅ GET USER WALLET
+export const getUserWallet = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const userId = req.user?.id;
+
+    const wallet = await db
+      .select()
+      .from(wallets)
+      .where(eq(wallets.userId, userId))
+      .limit(1);
+
+    if (!wallet.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Wallet not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      available: Number(wallet[0].balance),
+      locked: Number(wallet[0].lockedAmount),
+    });
+
+  } catch (error) {
+    console.error("User Wallet Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch wallet",
+    });
+  }
+};
+
+
+// ✅ GET USER TRANSACTIONS
+export const getUserTransactions = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const userId = req.user?.id;
+
+    const data = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.userId, userId))
+      .orderBy(desc(transactions.createdAt));
+
+    res.json({
+      success: true,
+      transactions: data,
+    });
+
+  } catch (error) {
+    console.error("Transactions Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch transactions",
     });
   }
 };

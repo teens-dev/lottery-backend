@@ -16,13 +16,13 @@ import adminRoutes from "./api/routes/admin.route";
 import revenueRoutes from "./api/routes/revenue.routes";
 import referralRoutes from "./api/routes/referral.routes";
 import ticketRoutes from "./api/routes/ticket.routes";
+import levelRoutes from "./api/routes/level.routes";
+import walletRoutes from "./api/routes/wallet.routes";
 
 dotenv.config();
 
-
-import walletRoutes from "./api/routes/wallet.routes";
-
 const app = express();
+
 app.use(
   cors({
     origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -30,7 +30,13 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json());
+// ✅ Parse JSON globally, but crucially preserve the raw unparsed Buffer as 'req.rawBody'.
+// This completely guarantees Razorpay Webhook Signatures mathematically match!
+app.use(express.json({
+  verify: (req: any, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 app.use(cookieParser());   // ✅ IMPORTANT FIX
 
 // Swagger
@@ -55,28 +61,29 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
+
 app.get("/", (req, res) => {
   res.send("API is running 🚀");
 });
 
 
-
-import levelRoutes from "./api/routes/level.routes";
-import revenueRoutes from "./api/routes/revenue.routes";
-
 // ✅ ROUTES (ORDER IMPORTANT)
-app.use("/api/users", userRoutes); // ✅ MUST BE HERE
-// ✅ Routes
+
+app.use("/api/users", userRoutes);
 app.use("/api/revenue", revenueRoutes);
 
 app.use("/api", drawRoutes);
-app.use("/api", levelRoutes); // ✅ NEW: Level Game Routes
+app.use("/api", levelRoutes);
+
 app.use("/api/payments", paymentRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/referral", referralRoutes);
 app.use("/api/tickets", ticketRoutes);
+
+// ✅ WALLET ROUTES
 app.use("/api", walletRoutes);
+
 
 const PORT = process.env.PORT || 10000;
 
