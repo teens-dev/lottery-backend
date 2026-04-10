@@ -44,7 +44,7 @@ backend/
 │       └── schema/
 │           ├── index.ts              ← Re-exports all schemas (single entry point)
 │           ├── independent.ts        ← 8 master/lookup tables (no foreign keys)
-│           ├── core.ts               ← 7 primary domain tables
+│           ├── core.ts               ← 7 primary domain tables - has dependency on core independent tables
 │           ├── junction.ts           ← 6 relationship/junction tables
 │           └── dependent.ts          ← 13 child/transaction tables
 ├── drizzle.config.ts                 ← Drizzle Kit configuration
@@ -120,6 +120,44 @@ npm run db:studio
 
 Opens a visual browser at `https://local.drizzle.studio` to inspect your tables.
 
+### 7. API Documentation (Swagger)
+
+The project includes interactive API documentation powered by Swagger UI and `swagger-jsdoc`.
+1. Start the development server by running `npm run dev`
+2. Open your browser and navigate to `http://localhost:10000/api-docs`
+
+#### How to Document New APIs
+
+You can document new API endpoints without creating separate YAML files. Simply add a JSDoc comment block with the `@swagger` tag directly above your controller functions or route definitions. The configuration will automatically gather all these comments to build the UI.
+
+**Example of documenting a basic GET endpoint:**
+
+```typescript
+/**
+ * @swagger
+ * /api/test:
+ *   get:
+ *     summary: Test the server
+ *     description: Returns a simple success message to verify the server is running
+ *     tags:
+ *       - General
+ *     responses:
+ *       200:
+ *         description: Server is working
+ */
+app.get("/test", (req, res) => {
+  res.send("Server is working");
+});
+```
+
+**Key properties to include in your definitions:**
+- `summary`: A short title for the endpoint.
+- `tags`: Group similar endpoints together (e.g., `[Draws]`, `[Users]`).
+- `requestBody`: If it's a POST/PUT request, define the JSON schema of what the client should send.
+- `responses`: Always define at least the success response (200/201) and common error responses (400/500).
+
+For a comprehensive example of documenting request bodies and nested JSON responses, check out the `createDraw` function in `src/api/controllers/draw.controller.ts`.
+
 ---
 
 ## 📦 Package.json Scripts
@@ -140,7 +178,7 @@ Opens a visual browser at `https://local.drizzle.studio` to inspect your tables.
 
 ---
 
-## 🗄️ Database Schema — All 34 Tables
+## 🗄️ Database Schema — All 39 Tables
 
 The schema is split into 4 tiers based on dependency order. Tables in each tier depend only on tables from previous tiers.
 
@@ -198,6 +236,7 @@ Defines categories of lottery draws available on the platform.
 ### 3. `payment_methods`
 
 Master list of supported payment methods on the platform.
+
 
 | Column | Type | Description |
 |---|---|---|
@@ -816,9 +855,57 @@ Tracks the complete payout lifecycle for each draw winner.
 
 ---
 
+## 🟪 TIER 5 — Payment Tables
+
+> Dedicated tables for the **Razorpay payment order lifecycle** and **user bank/UPI details**. They sit alongside Tier 4 but are scoped purely to payment operations.
+
+---
+
+### 38. `payment_orders`
+
+Tracks every Razorpay order created when a user initiates a wallet top-up or game-entry payment. One row = one `order_xxx` object at Razorpay.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | uuid PK | Unique internal order ID (auto-generated UUID) |
+| `user_id` | uuid FK → users | The user who initiated this payment |
+| `amount` | integer | Amount in **paise** (smallest INR unit). ₹499 → `49900`. Integer avoids float issues |
+| `razorpay_order_id` | varchar(100) UNIQUE | Razorpay's `order_xxx` identifier — used to match webhook callbacks and verify payment |
+| `status` | enum | `pending` → order created, awaiting payment · `success` → captured · `failed` → declined |
+| `created_at` | timestamp | When the order row was created in our system |
+
+**Indexes:** `user_id`, `razorpay_order_id`, `status`  
+**Relations:** FK to `users`  
+**How it fits with `transactions`:**  
+`payment_orders.razorpay_order_id` stores `order_xxx` (created *before* payment).  
+`transactions.gateway_txn_id` stores `pay_xxx` (captured *after* payment).  
+They are complementary — `payment_orders` fills the pre-payment gap that `transactions` doesn't cover.
+
+---
+
+### 39. `user_bank_accounts`
+
+Stores bank account and UPI details submitted by users for withdrawal processing. A single user may have multiple accounts; only `is_verified = true` accounts are eligible for payouts.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | uuid PK | Unique internal record ID |
+| `user_id` | uuid FK → users | The user who owns this bank account |
+| `account_number` | varchar(25) | Bank account number (stored as string to preserve leading zeros and handle all Indian formats) |
+| `ifsc` | varchar(15) | IFSC code of the bank branch — format: 4 alpha + `0` + 6 alphanumeric (e.g. `SBIN0001234`) |
+| `upi_id` | varchar(100) | UPI Virtual Payment Address / VPA (e.g. `user@upi`). Optional — user may provide bank-only or UPI-only |
+| `is_verified` | boolean | Whether verified by platform (penny-drop or manual admin review). Only `true` accounts can receive withdrawals |
+| `created_at` | timestamp | When the bank account record was first added |
+
+**Indexes:** `user_id`, `(user_id, is_verified)`  
+**Relations:** FK to `users`  
+**Relation to `withdrawals`:** `withdrawals` logs each payout event; `user_bank_accounts` stores the verified destination details referenced when processing a withdrawal.
+
+---
+
 ## 🔗 Table Relationships — Visual Map
 
-```
+``` 
 countries ──────────────────────────────────────────────┐
 levels ──────────────────────────────────────────────── users ──── wallets ──── transactions ──── referral_rewards
 admin_roles ──── admins ──── draws ──── tickets                │               │
@@ -843,6 +930,11 @@ users ──── points_history ──── points_rules ──── game_ty
 users ──── user_badges
 users ──── user_sessions
 users ──── kyc_submissions
+users ──── payment_orders          (order_xxx → pre-payment stage)
+users ──── user_bank_accounts      (verified bank/UPI → withdrawal destination)
+
+payment_orders.status: pending → success  (webhook updates after pay_xxx captured)
+transactions.gateway_txn_id = pay_xxx     (post-payment record)
 ```
 
 ---
@@ -858,6 +950,8 @@ users ──── kyc_submissions
 | `notifications_sent` | 50,000,000 | Bulk campaigns |
 | `user_sessions` | 2,000,000 | Active sessions |
 | `audit_logs` | 500,000 | Admin actions |
+| `payment_orders` | 5,000,000 | One per Razorpay order initiated |
+| `user_bank_accounts` | 2,000,000 | ~2 accounts per active user |
 | Master tables | < 1,000 each | Static reference data |
 
 ---
@@ -912,6 +1006,11 @@ The seed file must insert rows in this exact order to satisfy foreign key constr
 32. audit_logs           (needs: admins)
 33. user_sessions        (needs: users)
 34. prize_payouts        (needs: draw_winners, wallets, transactions)
+35. level_pools          (needs: game_types)
+36. level_entries        (needs: users, game_types, level_pools)
+37. withdrawals          (needs: users)
+38. payment_orders       (needs: users)
+39. user_bank_accounts   (needs: users)
 ```
 
 ---
@@ -954,3 +1053,130 @@ const goldPlusUsers = await db
 ---
 
 *Generated for Lottery Network Platform — Enterprise Backend v1.0*
+
+
+
+
+Yes, uncommenting 72+ will work perfectly fine — here is exactly what gets inserted and how every row is interlinked:
+
+---
+
+**Tier 1 — Independent (no deps):**
+```
+levels      → 1 row: "Basic Member" (id saved as level1)
+gameTypes   → 1 row: "Mega Millions" (id saved as gameType1)
+paymentMethods → 1 row: "UPI" (id saved as paymentMethod1)
+kycDocumentTypes → 1 row: "Aadhaar Card" (id saved as kycDocType1)
+notificationTemplates → 1 row: "Draw Started!" (id saved as notifTemplate1)
+rejectionReasons → 1 row: "Blurry Image" (id saved as rejectionReason1)
+countries   → 1 row: "India" (id saved as country1)
+adminRoles  → 1 row: "Super Admin" (id saved as adminRole1)
+```
+
+---
+
+**Tier 2 — Core (uses Tier 1 ids):**
+```
+users    → "Ravi Kumar" using level1.id + country1.id ✅
+admins   → "Admin User" using adminRole1.id ✅
+draws    → "Mega Millions #4821" using gameType1.id + admin1.id ✅
+wallets  → using user1.id ✅
+referral_codes → using user1.id ✅
+kyc_submissions → using user1.id + kycDocType1.id ✅
+notification_campaigns → using admin1.id + notifTemplate1.id ✅
+```
+
+---
+
+**Tier 3 — Junction (uses Tier 1 + 2 ids):**
+```
+draw_eligible_levels → draw1.id + level1.id ✅
+user_notification_reads → user1.id + campaign1.id ✅
+campaign_channels → campaign1.id ✅
+draw_winners → draw1.id + user1.id ✅
+user_badges → user1.id ✅
+admin_ip_whitelist → admin1.id ✅
+```
+
+---
+
+**Tier 4 — Dependent (uses everything above):**
+```
+tickets → user1.id + draw1.id ✅
+transactions → user1.id + wallet1.id + paymentMethod1.id ✅
+wallet_adjustments → wallet1.id + admin1.id + transaction1.id ✅
+referrals → user1.id (referrer) + user2.id (referred) ✅
+referral_rewards → referral1.id + refTxn.id ✅
+points_rules → gameType1.id ✅
+points_history → user1.id + pointsRule1.id + ticket1.id ✅
+draw_results → draw1.id ✅
+kyc_review_log → kycSubmission1.id + admin1.id ✅
+notifications_sent → campaign1.id + user1.id ✅
+audit_logs → admin1.id ✅
+user_sessions → user1.id ✅
+prize_payouts → drawWinner1.id + wallet1.id + payoutTxn.id ✅
+```
+
+---
+
+Yes — `draws` row has **real admin1.id and gameType1.id** inserted into it, not just random values — because `.returning()` captures the actual UUID generated by Postgres after each insert and passes it to the next insert. So every single row across all 34 tables is **genuinely linked** with real foreign key values — if you open Supabase and click any row, every foreign key ID will resolve to an actual existing row in the referenced table.
+
+rng - rngSeedHash is a SHA-256 hash of the random seed used to generate the winning numbers — it is published before the draw happens so users can verify the draw was not manipulated after the fact. After the draw, the actual rngSeed is revealed in draw_results — anyone can hash it and compare with the pre-published rngSeedHash to prove the winning numbers were genuinely random and not changed.
+
+for generating fresh database :
+
+# Step 1 — Delete migrations folder
+rm -rf src/db/migrations
+
+# Step 2 — Drop and recreate database in pgAdmin
+DROP DATABASE lottery_backend;
+CREATE DATABASE lottery_backend;
+
+# Step 3 — Regenerate clean migrations
+npm run db:generate
+
+# Step 4 — Apply fresh migrations (no conflicts now)
+npm run db:migrate
+
+# Step 5 — Seed
+npx tsx src/db/seed.ts
+
+# backend/.env
+DATABASE_URL="postgresql://postgres:9803@localhost:5432/lottery-backend"
+
+#DATABASE_URL="postgresql://postgres:password@localhost:5432/dtabase_name"
+NODE_ENV="development"
+
+RAZORPAY_KEY_ID="rzp_test_SRrKIfsKje5uNq"
+RAZORPAY_KEY_SECRET="KfntU4VVvNMAX64AvdhClFNd"
+
+JWT_SECRET=22acf41ebb7d622101279e4e543489c60b05e591878a87398ab225b20d343e8a62c222abe976f737613e4c297e9b6a0b58969223b8f863b5d154d086011f3139
+
+EMAIL_USER=gkmurthy2312@gmail.com
+EMAIL_PASS=pfco wufq xebr awxu
+
+ ----------------------------------------Payments---------------------------
+
+ What was added / changed
+File	Change
+payment.controller.ts	Appended handleRazorpayWebhook export — zero changes to existing functions
+payment.routes.ts	Added /webhook route with express.raw() middleware, declared first in the router
+.env	Added RAZORPAY_WEBHOOK_SECRET placeholder
+How the webhook flow works
+Razorpay POST /api/payments/webhook
+  │
+  ├─ express.raw() → req.body = Buffer  ← raw bytes preserved for HMAC
+  │
+  ├─ [Step 2] Check X-Razorpay-Signature header exists
+  ├─ [Step 4] HMAC SHA256(rawBody, RAZORPAY_WEBHOOK_SECRET) === header value?
+  │           No → 400 rejected
+  ├─ [Step 6] event !== "payment.captured" → 200 ignored
+  ├─ [Step 8] Find transaction WHERE txnRef = razorpay_order_id
+  ├─ [Step 9] txn.status === "success"? → 200 no-op  ← idempotency guard
+  └─ [Step 10] db.transaction():
+        ├─ UPDATE transactions SET status="success", gatewayTxnId="pay_xxx"
+        └─ UPDATE wallets SET balance = balance + amountInRupees  ← atomic SQL
+One thing you must do
+Go to Razorpay Dashboard → Settings → Webhooks → add https://your-domain.com/api/payments/webhook → copy the Webhook Secret → paste it into .env as RAZORPAY_WEBHOOK_SECRET.
+
+RAZORPAY_WEBHOOK_SECRET="your_razorpay_webhook_secret_here"

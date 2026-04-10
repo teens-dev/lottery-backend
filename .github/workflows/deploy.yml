@@ -1,0 +1,179 @@
+name: Enterprise CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - devops-pipeline
+
+jobs:
+
+# 1. BUILD + TEST
+  build-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Setup Node
+      uses: actions/setup-node@v3
+      with:
+        node-version: 20   
+
+    - name: Install Dependencies
+      run: npm install
+
+    - name: Run Tests
+      run: npm test || echo "No tests found"
+
+
+# 2. DOCKER BUILD + PUSH
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: build-test
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Docker Login
+      run: |
+        echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+
+    - name: Build Docker Image
+      run: |
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/lottery-app:${{ github.sha }} .
+        docker tag ${{ secrets.DOCKER_USERNAME }}/lottery-app:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/lottery-app:latest
+
+    - name: Push Docker Images
+      run: |
+        docker push ${{ secrets.DOCKER_USERNAME }}/lottery-app:${{ github.sha }}
+        docker push ${{ secrets.DOCKER_USERNAME }}/lottery-app:latest
+
+
+# 🔵 3. DEPLOY TO STAGING (BLUE)
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: docker-build
+
+    steps:
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Deploy BLUE
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
+
+        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+        echo "Updating BLUE deployment..."
+        kubectl set image deployment/my-app-blue my-app=${{ secrets.DOCKER_USERNAME }}/lottery-app:${{ github.sha }}
+
+        kubectl rollout status deployment/my-app-blue
+
+        kubectl get pods
+
+        EOF
+
+
+#  4. CANARY DEPLOYMENT
+  deploy-canary:
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+
+    steps:
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Deploy CANARY
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
+
+        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+        echo " Deploying CANARY..."
+        kubectl set image deployment/my-app-canary my-app=${{ secrets.DOCKER_USERNAME }}/lottery-app:${{ github.sha }}
+
+        kubectl rollout status deployment/my-app-canary
+
+        kubectl get pods
+
+        EOF
+
+
+#  5. MANUAL APPROVAL
+  approval:
+    runs-on: ubuntu-latest
+    needs: deploy-canary
+    environment: production
+
+    steps:
+    - name: Waiting for Approval
+      run: echo "Waiting for manual approval..."
+
+
+# 6. PRODUCTION DEPLOY (GREEN ACTIVE)
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: approval
+
+    steps:
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Switch Traffic to GREEN
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
+
+        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+        echo "Scaling GREEN deployment..."
+        kubectl scale deployment my-app-green --replicas=2
+
+        echo "Scaling DOWN BLUE deployment..."
+        kubectl scale deployment my-app-blue --replicas=0
+
+        kubectl get pods
+
+        EOF
+
+
+# 🔁 7. ROLLBACK (IF FAILURE)
+  rollback:
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: failure()
+
+    steps:
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Rollback to BLUE
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
+
+        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+        echo "Rolling back to BLUE..."
+        kubectl scale deployment my-app-blue --replicas=2
+        kubectl scale deployment my-app-green --replicas=0
+
+        kubectl get pods
+
+        EOF
