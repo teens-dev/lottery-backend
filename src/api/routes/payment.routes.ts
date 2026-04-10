@@ -59,12 +59,12 @@ router.get("/transactions", protect, adminOnly, getAdminTransactions);
  * POST /api/payments/create-order
  * Initiates a Razorpay payment order.
  */
-router.post("/create-order", createRazorpayOrder);
+router.post("/create-order", protect, createRazorpayOrder);
 
 /**
  * POST /api/payments/verify
  * Verifies the Razorpay payment signature and logs the transaction.
  */
-router.post("/verify", verifyRazorpayPayment);
+router.post("/verify", protect,verifyRazorpayPayment);
 
 export default router;

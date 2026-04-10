@@ -13,6 +13,7 @@ import {
   createAdminLevel,
   forceCompletePool
 } from "../controllers/level.controller";
+import { protect } from "../middleware/auth.middleware";
 
 const router = Router();
 
@@ -43,7 +44,7 @@ router.get("/levels", getActiveLevels);
  *     summary: Join a level pool
  *     tags: [Level Game]
  */
-router.post("/levels/join", joinLevel);
+router.post("/levels/join", protect, joinLevel);
 
 /**
  * @swagger
@@ -54,23 +55,7 @@ router.post("/levels/join", joinLevel);
  */
 router.get("/levels/my-entries", getMyEntries);
 
-/**
- * @swagger
- * /api/wallet:
- *   get:
- *     summary: Return user wallet balance
- *     tags: [Wallet]
- */
-router.get("/wallet", getWallet);
-
-/**
- * @swagger
- * /api/withdraw:
- *   post:
- *     summary: Withdraw funds from wallet
- *     tags: [Wallet]
- */
-router.post("/withdraw", withdraw);
+// Wallet routes removed from level.routes.ts (these are handled in wallet.routes.ts)
 
 /* ================= ADMIN ROUTES ================= */
 

@@ -87,7 +87,7 @@ export const getTicketCount = async (_req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      total,
+      count: total,
     });
 
   } catch (error) {

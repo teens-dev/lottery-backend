@@ -18,12 +18,14 @@ const razorpay = new Razorpay({
  *     summary: Create a Razorpay order and log pending transaction
  *     tags: [Payments]
  */
-export const createRazorpayOrder = async (req: Request, res: Response) => {
+export const createRazorpayOrder = async (req: any, res: Response) => {
   try {
-    const { amount, currency = "INR", userId, walletId } = req.body;
+    const { amount, currency = "INR" } = req.body;
+    const userId = req.user?.id;
+    const walletId = req.user?.walletId;
 
     // [DEBUG]: Log incoming request data
-    console.log("Creating Order - Request Body:", req.body);
+    console.log("Creating Order - Request Body:", req.body, "User ID:", userId, "Wallet ID:", walletId);
 
     // Validation for UUID format (standard UUID v4 regex)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -90,22 +92,23 @@ export const createRazorpayOrder = async (req: Request, res: Response) => {
  *     summary: Verify payment, update transaction status, and create ticket
  *     tags: [Payments]
  */
-export const verifyRazorpayPayment = async (req: Request, res: Response) => {
+export const verifyRazorpayPayment = async (req: any, res: Response) => {
   try {
     const {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
-      userId,
       amount,
       drawId,
       ticketNumber,
       pickedNumbers,
-      walletId
     } = req.body;
 
+    const userId = req.user?.id;
+    const walletId = req.user?.walletId;
+
     // [DEBUG]: Log incoming verification data
-    console.log("Verifying Payment - Request Body:", req.body);
+    console.log("Verifying Payment - Request Body:", req.body, "User ID:", userId, "Wallet ID:", walletId);
 
     // 1. Signature Verification
     const body = razorpay_order_id + "|" + razorpay_payment_id;
@@ -124,19 +127,86 @@ export const verifyRazorpayPayment = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Invalid payment signature" });
     }
 
-    console.log("Signature valid. Webhook will handle final fulfillment.");
+    console.log("Signature valid. Implementing instant fulfillment...");
 
-    // Note: The actual DB updates (crediting wallets, tracking payment success,
-    // and processing tickets) are securely handled by the backend Razorpay 
-    // webhook at /api/payments/webhook.
-    //
-    // This /verify API simply exists for initial frontend confirmation so the UI
-    // knows the payment signature was cryptographically proven valid immediately.
+    // 2. Fulfillment Logic (Mirroring Webhook for immediate UI feedback)
+    try {
+      await db.transaction(async (tx) => {
+        // [0] Idempotency Check & Secure Amount Fetch
+        const existingOrder = await tx.select().from(paymentOrders).where(eq(paymentOrders.razorpayOrderId, razorpay_order_id));
+        if (existingOrder.length === 0) {
+          throw new Error(`Order ${razorpay_order_id} not found in database.`);
+        }
+        
+        if (existingOrder[0].status === "success") {
+          console.log(`[Verify] Order ${razorpay_order_id} already marked success (Idempotency).`);
+          return;
+        }
 
-    return res.status(200).json({
-      success: true,
-      message: "Signature verified. Webhook will process final fulfillment."
-    });
+        const exactAmountInPaise = existingOrder[0].amount;
+        const amountToAddInRupees = Number((exactAmountInPaise / 100).toFixed(2));
+
+        // [A] Update payment_orders
+        await tx.update(paymentOrders)
+          .set({ status: "success" })
+          .where(eq(paymentOrders.razorpayOrderId, razorpay_order_id));
+
+        // [B] Update Transactions
+        await tx.update(transactions)
+          .set({
+            status: "success",
+            gatewayTxnId: razorpay_payment_id,
+            note: `Verified: Frontend signature proven — ${razorpay_payment_id}`,
+          })
+          .where(eq(transactions.txnRef, razorpay_order_id));
+
+        // [C] Credit Wallet ONLY FOR DEPOSITS (No drawId)
+        // If drawId is present, it's a ticket purchase, so we don't credit the wallet balance.
+        if (!drawId) {
+          let targetWalletId = walletId;
+          const userWallets = await tx.select().from(wallets).where(eq(wallets.userId, userId));
+          
+          if (userWallets.length > 0) {
+            targetWalletId = userWallets[0].id;
+            const currentBalance = Number(userWallets[0].balance) || 0;
+            const newBalance = currentBalance + amountToAddInRupees;
+            
+            await tx.update(wallets)
+              .set({
+                balance: newBalance.toFixed(2),
+                updatedAt: new Date(),
+              })
+              .where(eq(wallets.id, targetWalletId));
+            
+            console.log(`[Verify Success] DEPOSIT: Wallet ${targetWalletId} credited ₹${amountToAddInRupees}`);
+          } else {
+            console.log(`[Verify] Wallet missing for deposit. Creating for user ${userId}.`);
+            const [newWallet] = await tx.insert(wallets).values({
+              userId: userId,
+              balance: amountToAddInRupees.toFixed(2),
+              lockedAmount: "0.00"
+            }).returning({ id: wallets.id });
+            
+            console.log(`[Verify Success] DEPOSIT: New Wallet ${newWallet.id} created and credited ₹${amountToAddInRupees}`);
+          }
+        } else {
+          console.log(`[Verify Success] PURCHASE: Ticket(s) issued for Draw ${drawId}. No wallet credit needed.`);
+        }
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Payment verified and wallet updated successfully."
+      });
+    } catch (fulfillmentError: any) {
+      console.error("Fulfillment Error (DB):", fulfillmentError.message);
+      // Even if DB fails, signature was valid. Returns 200 so UI doesn't panic; 
+      // Webhook will retry background fulfillment.
+      return res.status(200).json({
+        success: true,
+        message: "Signature verified. Webhook will handle final balance update."
+      });
+    }
   } catch (error) {
     console.error("Payment Verification Error:", error);
     res.status(500).json({ error: "Internal server error during verification" });
@@ -550,7 +620,7 @@ export const updateWalletBalance = async (
       // We need the wallet ID for the transaction log and current balance for validation.
       const userWallets = await tx
         .select()
-        .from(wallets)
+        .from(wallets)  
         .where(eq(wallets.userId, userId));
 
       if (userWallets.length === 0) {

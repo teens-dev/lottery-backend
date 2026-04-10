@@ -82,7 +82,7 @@ app.use("/api/referral", referralRoutes);
 app.use("/api/tickets", ticketRoutes);
 
 // ✅ WALLET ROUTES
-app.use("/api", walletRoutes);
+app.use("/api/wallet", walletRoutes);
 
 
 const PORT = process.env.PORT || 10000;

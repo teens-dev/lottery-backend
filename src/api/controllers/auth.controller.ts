@@ -2,7 +2,7 @@ import type { Request as ExpressRequest, Response as ExpressResponse } from "exp
 import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { db } from "../../db/db";
-import { users, referralCodes, referrals } from "../../db/schema";
+import { users, referralCodes, referrals, wallets } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import { sendWelcomeEmail } from "../../utils/sendEmail";
 
@@ -56,70 +56,73 @@ export const register = async (
 
     const hashedPassword = await bcrypt.hash(String(password), 10);
 
-    const insertedUser = await db
-      .insert(users)
-      .values({
-        levelId: level_id,
-        countryId: country_id,
-        name,
-        email,
-        phone: phone || null,
-        passwordHash: hashedPassword,
-        points: 0,
-        totalPoints: 0,
-        status: "active",
-        kycStatus: "pending",
-        mfaEnabled: false,
-        emailVerified: false,
-        phoneVerified: false,
-      })
-      .returning({
-        id: users.id,
-        name: users.name,
-        email: users.email,
-      });
-
-    const user = insertedUser[0];
-
-    /* =========================
-       CREATE REFERRAL CODE
-    ========================== */
-
-    const code = generateReferralCode();
-
-    await db.insert(referralCodes).values({
-      userId: user.id,
-      code
-    });
-
-    /* =========================
-       VERIFY REFERRAL CODE
-    ========================== */
-
-    if (referralCode) {
-
-      const referrer = await db
-        .select()
-        .from(referralCodes)
-        .where(eq(referralCodes.code, referralCode))
-        .limit(1);
-
-      if (referrer.length > 0) {
-
-        await db.insert(referrals).values({
-          referrerUserId: referrer[0].userId,
-          referredUserId: user.id
+    const result = await db.transaction(async (tx) => {
+      // 1. Create User
+      const [user] = await tx
+        .insert(users)
+        .values({
+          levelId: level_id,
+          countryId: country_id,
+          name,
+          email,
+          phone: phone || null,
+          passwordHash: hashedPassword,
+          points: 0,
+          totalPoints: 0,
+          status: "active",
+          kycStatus: "pending",
+          mfaEnabled: false,
+          emailVerified: false,
+          phoneVerified: false,
+        })
+        .returning({
+          id: users.id,
+          name: users.name,
+          email: users.email,
         });
 
-        await db
-          .update(referralCodes)
-          .set({
-            totalReferrals: referrer[0].totalReferrals + 1
-          })
-          .where(eq(referralCodes.userId, referrer[0].userId));
+      // 2. Create Wallet
+      const [wallet] = await tx
+        .insert(wallets)
+        .values({
+          userId: user.id,
+          balance: "0.00",
+          lockedAmount: "0.00",
+        })
+        .returning({ id: wallets.id });
 
+      // 3. Create Referral Code
+      const code = generateReferralCode();
+      await tx.insert(referralCodes).values({
+        userId: user.id,
+        code
+      });
+
+      // 4. Handle Referral Logic
+      if (referralCode) {
+        const [referrer] = await tx
+          .select()
+          .from(referralCodes)
+          .where(eq(referralCodes.code, referralCode))
+          .limit(1);
+
+        if (referrer) {
+          await tx.insert(referrals).values({
+            referrerUserId: referrer.userId,
+            referredUserId: user.id
+          });
+
+          await tx
+            .update(referralCodes)
+            .set({ totalReferrals: referrer.totalReferrals + 1 })
+            .where(eq(referralCodes.userId, referrer.userId));
+        }
       }
-    }
+
+      return { user, walletId: wallet.id };
+    });
+
+    const { user, walletId } = result;
 
     /* ✅ Send Welcome Email (Non-blocking) */
     sendWelcomeEmail(user.email, user.name).catch(err =>
@@ -129,7 +132,8 @@ export const register = async (
     const token = jwt.sign(
       { 
         id: user.id,
-        role: "user" // Default role for new registrations
+        role: "user",
+        walletId: walletId
       },
       JWT_SECRET,
       JWT_OPTIONS
@@ -206,10 +210,34 @@ export const login = async (
       });
     }
 
+    let walletId: string | null = null;
+    const userWallet = await db
+      .select({ id: wallets.id })
+      .from(wallets)
+      .where(eq(wallets.userId, user.id))
+      .limit(1);
+
+    if (userWallet.length > 0) {
+      walletId = userWallet[0].id;
+    } else {
+      // ✅ RESILIENT PROVISIONING: Create wallet if missing for legacy users
+      console.log(`[Login] Provisioning missing wallet for legacy user: ${user.id}`);
+      const [newWallet] = await db
+        .insert(wallets)
+        .values({
+          userId: user.id,
+          balance: "0.00",
+          lockedAmount: "0.00",
+        })
+        .returning({ id: wallets.id });
+      walletId = newWallet.id;
+    }
+
     const token = jwt.sign(
       { 
         id: user.id,
-        role: user.role // Include the actual role from the DB (e.g., 'user', 'admin', etc.)
+        role: user.role, 
+        walletId: walletId
       },
       JWT_SECRET,
       JWT_OPTIONS
