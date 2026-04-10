@@ -107,7 +107,7 @@ CREATE TABLE "draws" (
 	"status" "draw_status" DEFAULT 'draft' NOT NULL,
 	"draw_date" timestamp NOT NULL,
 	"description" text,
-	"rng_seed_hash" varchar(64),
+	"rng_seed_hash" varchar(124),
 	"is_guaranteed" boolean DEFAULT true NOT NULL,
 	"min_entries" integer DEFAULT 10,
 	"created_at" timestamp DEFAULT now(),

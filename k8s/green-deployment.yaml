@@ -16,6 +16,6 @@ spec:
     spec:
       containers:
       - name: my-app
-        image: vyshanvipriya/lottery-app:latest
+        image: vyshanvipriya/lottery-app
         ports:
         - containerPort: 10000
