@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../db/index";
-import { draws, gameTypes, tickets } from "../../db/schema";
-import { eq, desc, SQL } from "drizzle-orm";
+import { draws, gameTypes, tickets, drawResults, drawWinners, wallets } from "../../db/schema";
+import { eq, desc, inArray, and, sql } from "drizzle-orm";
 import { drawStatusEnum } from "../../db/schema";
 
 /**
@@ -322,5 +322,102 @@ export const getDrawTickets = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error fetching tickets:", error);
     res.status(500).json({ success: false, message: "Error fetching tickets" });
+  }
+};
+
+// POST /api/draw-results — Admin declares result by selecting winning ticket numbers
+export const declareResult = async (req: Request, res: Response) => {
+  const { drawId, winningTicketNumbers } = req.body;
+
+  if (!drawId || !Array.isArray(winningTicketNumbers) || winningTicketNumbers.length === 0) {
+    return res.status(400).json({ success: false, error: "drawId and winningTicketNumbers[] are required" });
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      // 1. Fetch draw and guard against double-declaration
+      const [draw] = await tx.select().from(draws).where(eq(draws.id, drawId)).limit(1);
+      if (!draw) throw new Error("Draw not found");
+      if (draw.status === "completed") throw new Error("Result already declared for this draw");
+
+      // 2. Look up winning tickets
+      const winningTickets = await tx
+        .select()
+        .from(tickets)
+        .where(and(eq(tickets.drawId, drawId), inArray(tickets.ticketNumber, winningTicketNumbers)));
+
+      const winnersCount = winningTickets.length;
+      const prizePool = Number(draw.prizePool);
+      const prizePerWinner = winnersCount > 0 ? (prizePool / winnersCount).toFixed(2) : "0.00";
+      const displayNumbers = winningTickets.length > 0
+        ? winningTickets.map((t) => t.pickedNumbers || t.ticketNumber).filter(Boolean).join(",")
+        : winningTicketNumbers.join(",");
+
+
+      // 3. Mark draw as completed
+      await tx.update(draws).set({ status: "completed" }).where(eq(draws.id, drawId));
+
+      // 4. Insert draw_results summary
+      await tx.insert(drawResults).values({
+        drawId,
+        winningNumbers: displayNumbers,
+        totalTicketsSold: draw.currentEntries ?? 0,
+        totalPrizePaid: winnersCount > 0 ? prizePool.toString() : "0.00",
+        winnersCount,
+        resultDeclaredAt: new Date(),
+      });
+
+      // 5. For each winner: mark ticket, record draw_winner, credit wallet
+      for (const t of winningTickets) {
+        await tx.update(tickets).set({ isWinner: true }).where(eq(tickets.id, t.id));
+
+        await tx.insert(drawWinners).values({
+          drawId,
+          userId: t.userId,
+          prizeAmount: prizePerWinner,
+          createdAt: new Date(),
+        });
+
+        await tx
+          .update(wallets)
+          .set({ balance: sql`${wallets.balance}::numeric + ${prizePerWinner}::numeric` })
+          .where(eq(wallets.userId, t.userId));
+      }
+    });
+
+    return res.status(200).json({ success: true, message: "Result declared and winners rewarded" });
+  } catch (error: any) {
+    console.error("[declareResult]", error.message);
+    return res.status(400).json({ success: false, error: error.message });
+  }
+};
+
+// GET /api/draw-results — Public: fetch all completed draw results
+export const getDrawResults = async (_req: Request, res: Response) => {
+  try {
+    const results = await db
+      .select({
+        id: drawResults.id,
+        drawId: draws.id,
+        drawName: draws.name,
+        prizePool: draws.prizePool,
+        drawDate: draws.drawDate,
+        gameTypeName: gameTypes.name,
+        gameTypeIcon: gameTypes.icon,
+        winningNumbers: drawResults.winningNumbers,
+        totalTicketsSold: drawResults.totalTicketsSold,
+        totalPrizePaid: drawResults.totalPrizePaid,
+        winnersCount: drawResults.winnersCount,
+        resultDeclaredAt: drawResults.resultDeclaredAt,
+      })
+      .from(drawResults)
+      .innerJoin(draws, eq(drawResults.drawId, draws.id))
+      .leftJoin(gameTypes, eq(draws.gameTypeId, gameTypes.id))
+      .orderBy(desc(drawResults.resultDeclaredAt));
+
+    return res.status(200).json({ success: true, data: results });
+  } catch (error: any) {
+    console.error("[getDrawResults]", error.message);
+    return res.status(500).json({ success: false, error: "Failed to fetch draw results" });
   }
 };
