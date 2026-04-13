@@ -10,11 +10,16 @@ export const protect = (
   res: Response,
   next: NextFunction
 ) => {
-  // ✅ Support both standard user tokens and admin dashboard tokens
-  const token = req.cookies?.admin_token || req.cookies?.token;
-  
-  if (req.cookies?.admin_token) {
-    console.log("[Auth] Admin token detected");
+  // ✅ User token takes priority. Fall back to admin_token only if no user token exists.
+  // WHY: The browser sends BOTH cookies simultaneously. If admin_token is checked first,
+  // the user payment flow gets authenticated as admin (which has no walletId),
+  // breaking signature verification and wallet lookups.
+  const token = req.cookies?.token || req.cookies?.admin_token;
+
+  if (!req.cookies?.token && req.cookies?.admin_token) {
+    console.log("[Auth] Admin token used (no user token present)");
+  } else if (req.cookies?.token) {
+    console.log("[Auth] User token used");
   }
 
   if (!token) {

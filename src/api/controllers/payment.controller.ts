@@ -22,66 +22,55 @@ export const createRazorpayOrder = async (req: any, res: Response) => {
   try {
     const { amount, currency = "INR" } = req.body;
     const userId = req.user?.id;
-    const walletId = req.user?.walletId;
+    let walletId = req.user?.walletId;
 
-    // [DEBUG]: Log incoming request data
-    console.log("Creating Order - Request Body:", req.body, "User ID:", userId, "Wallet ID:", walletId);
-
-    // Validation for UUID format (standard UUID v4 regex)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
     if (!userId || !uuidRegex.test(userId)) {
-      console.error("Invalid userId format:", userId);
-      return res.status(400).json({ error: "Invalid userId format. Expected UUID." });
+      return res.status(400).json({ error: "Unauthorized: invalid user session" });
     }
 
+    // If walletId missing from token (old session / admin), look it up
     if (!walletId || !uuidRegex.test(walletId)) {
-      console.error("Invalid walletId format:", walletId);
-      return res.status(400).json({ error: "Invalid walletId format. Expected UUID." });
+      const userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId)).limit(1);
+      walletId = userWallets[0]?.id ?? null;
     }
 
     const options = {
-      amount: amount * 100, // in paise
+      amount: Math.round(amount * 100), // paise
       currency,
-      receipt: `receipt_${Date.now()}`,
+      receipt: `rcpt_${Date.now()}`,
     };
 
     const order = await razorpay.orders.create(options);
 
-    // Log transaction as 'pending' immediately
     try {
-      // 1. Store payment_orders record BEFORE the actual payment happens.
-      // Why? This explicitly tracks the Razorpay order lifecycle locally.
-      // How webhook uses it: When a "payment.captured" webhook arrives, it easily
-      // looks up this exact paymentOrders row via razorpayOrderId to trace it back to the user.
       await db.insert(paymentOrders).values({
-        userId: userId,
-        amount: Math.round(amount * 100), // convert rupees to paise as per schema
+        userId,
+        amount: Math.round(amount * 100),
         razorpayOrderId: order.id,
         status: "pending",
       });
 
-      // 2. Backward compatibility: continue logging in the general transactions table
-      await db.insert(transactions).values({
-        userId: userId,
-        walletId: walletId,
-        txnRef: order.id, // Store order ID as reference
-        amount: amount.toString(),
-        type: "deposit",
-        status: "pending",
-        note: "Order created, waiting for payment",
-      });
-      console.log(`Transaction & PaymentOrder logged for order: ${order.id}`);
-    } catch (dbError: any) {
-      console.error("Database Insertion Error (create order):", dbError.message);
-      // We still return the order to the frontend, but log the failure
+      if (walletId) {
+        await db.insert(transactions).values({
+          userId,
+          walletId,
+          txnRef: order.id,
+          amount: amount.toString(),
+          type: "deposit",
+          status: "pending",
+          note: "Order created",
+        });
+      }
+    } catch (dbErr: any) {
+      console.error("[createOrder] DB log failed:", dbErr.message);
     }
 
-
-    res.status(200).json(order);
+    return res.status(200).json(order);
   } catch (error) {
-    console.error("Razorpay Order Error:", error);
-    res.status(500).json({ error: "Failed to create Razorpay order" });
+    console.error("[createOrder] Razorpay error:", error);
+    return res.status(500).json({ error: "Failed to create Razorpay order" });
   }
 };
 
@@ -110,20 +99,20 @@ export const verifyRazorpayPayment = async (req: any, res: Response) => {
     // [DEBUG]: Log incoming verification data
     console.log("Verifying Payment - Request Body:", req.body, "User ID:", userId, "Wallet ID:", walletId);
 
-    // 1. Signature Verification
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    // 1. Signature Verification — trim all values to prevent whitespace mismatches
+    const secret = (process.env.RAZORPAY_KEY_SECRET || "").trim();
+    const orderId  = (razorpay_order_id  || "").trim();
+    const paymentId = (razorpay_payment_id || "").trim();
+    const receivedSig = (razorpay_signature  || "").trim();
+
+    const body = orderId + "|" + paymentId;
     const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
-      .update(body.toString())
+      .createHmac("sha256", secret)
+      .update(body)
       .digest("hex");
 
-    const isSignatureValid = expectedSignature === razorpay_signature;
-
-    if (!isSignatureValid) {
-      console.error("Signature verification failed for order:", razorpay_order_id);
-      await db.update(transactions)
-        .set({ status: "failed", note: "Signature verification failed" })
-        .where(eq(transactions.txnRef, razorpay_order_id));
+    if (expectedSignature !== receivedSig) {
+      console.error("[verify] Signature mismatch for order:", orderId);
       return res.status(400).json({ error: "Invalid payment signature" });
     }
 
