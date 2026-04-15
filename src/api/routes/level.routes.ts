@@ -26,6 +26,7 @@ const router = Router();
  *     summary: Return all level games
  *     tags: [Level Game]
  */
+
 router.get("/level-games", getLevelGames);
 
 /**
@@ -84,6 +85,7 @@ router.post("/admin/level-games", createLevelGame);
  *     summary: Get level game statistics
  *     tags: [Admin Level Game]
  */
+
 router.get("/admin/level-games/stats", getAdminStats);
 
 /**

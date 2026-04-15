@@ -164,14 +164,11 @@ export const register = async (
 
   }
 };
-
-
 /* LOGIN USER */
 export const login = async (
   req: ExpressRequest,
   res: ExpressResponse
 ) => {
-
   try {
 
     const { email, password } = req.body;
@@ -182,27 +179,22 @@ export const login = async (
         message: "Email and password required",
       });
     }
-
     const result = await db
       .select()
       .from(users)
       .where(eq(users.email, email))
       .limit(1);
-
     const user = result[0];
-
     if (!user) {
       return res.status(401).json({
         success:false,
         message: "Invalid email or password",
       });
     }
-
     const match = await bcrypt.compare(
       String(password),
       user.passwordHash
     );
-
     if (!match) {
       return res.status(401).json({
         success:false,

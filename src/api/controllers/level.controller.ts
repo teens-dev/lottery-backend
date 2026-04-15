@@ -8,6 +8,7 @@ import { eq, and, sql, desc } from "drizzle-orm";
  * In a real app, this would come from auth middleware (req.user.id).
  * If missing, falls back to the first user in the database (e.g., Ravi Kumar from seed).
  */
+
 const getUserId = async (providedUserId?: any) => {
   if (providedUserId && providedUserId !== 'undefined' && typeof providedUserId === 'string') return providedUserId;
   const [firstUser] = await db.select().from(users).limit(1);
@@ -90,25 +91,65 @@ export const joinLevel = async (req: Request, res: Response) => {
 
     if (!poolId || !userId) return res.status(400).json({ error: "Could not identify user or pool" });
 
-    // NEW CHECK: Prevent joining if the ID is a frontend placeholder (e.g., "placeholder-1")
-    if (typeof poolId === 'string' && poolId.startsWith('placeholder-')) {
-      return res.status(400).json({ error: "This level pool hasn't been initialized by the admin yet." });
-    }
-
-    // Basic UUID format check to avoid DB query failure
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (typeof poolId === 'string' && !uuidRegex.test(poolId)) {
-      return res.status(400).json({ error: "Invalid Pool ID format." });
-    }
-
     await db.transaction(async (tx) => {
+      let actualPoolId = poolId;
+
+      if (typeof poolId === 'string' && poolId.startsWith('placeholder-')) {
+        const parts = poolId.split('-');
+        if (parts.length < 3) {
+          throw new Error("Invalid placeholder format.");
+        }
+        const gameId = parseInt(parts[1], 10);
+        const levelNum = parseInt(parts[2], 10);
+
+        if (isNaN(gameId) || isNaN(levelNum)) {
+          throw new Error("Invalid gameId or levelNum in placeholder.");
+        }
+
+        const [existingPool] = await tx.select()
+          .from(levelPools)
+          .where(
+            and(
+              eq(levelPools.gameTypeId, gameId),
+              eq(levelPools.level, levelNum),
+              eq(levelPools.status, 'filling')
+            )
+          )
+          .limit(1);
+
+        if (existingPool) {
+          actualPoolId = existingPool.id;
+        } else {
+          const [game] = await tx.select().from(gameTypes).where(eq(gameTypes.id, gameId));
+          if (!game) {
+            throw new Error("Game not found.");
+          }
+
+          const [newPool] = await tx.insert(levelPools).values({
+            gameTypeId: gameId,
+            level: levelNum,
+            requiredCount: 4,
+            currentCount: 0,
+            status: 'filling'
+          }).returning({ id: levelPools.id });
+
+          actualPoolId = newPool.id;
+        }
+      } else {
+        // Basic UUID format check to avoid DB query failure
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (typeof poolId === 'string' && !uuidRegex.test(poolId)) {
+          throw new Error("Invalid Pool ID format.");
+        }
+      }
+
       const [pool] = await tx.select({
         pool: levelPools,
         game: gameTypes
       })
         .from(levelPools)
         .innerJoin(gameTypes, eq(levelPools.gameTypeId, gameTypes.id))
-        .where(eq(levelPools.id, poolId));
+        .where(eq(levelPools.id, actualPoolId));
 
       if (!pool || pool.pool.status !== 'filling') {
         throw new Error("Pool is not available for joining");
