@@ -8,7 +8,6 @@ import { eq, and, sql, desc } from "drizzle-orm";
  * In a real app, this would come from auth middleware (req.user.id).
  * If missing, falls back to the first user in the database (e.g., Ravi Kumar from seed).
  */
-
 const getUserId = async (providedUserId?: any) => {
   if (providedUserId && providedUserId !== 'undefined' && typeof providedUserId === 'string') return providedUserId;
   const [firstUser] = await db.select().from(users).limit(1);
@@ -57,13 +56,9 @@ export const getActiveLevels = async (req: Request, res: Response) => {
       // NEW LOGIC: Registration fee for every level is now the same as the base entry fee.
       // We no longer multiply the fee by the level number.
       const entryFee = Number(p.entryFee);
-
       return {
         ...p,
-        // The display fee remains fixed for all levels
         entryFee: entryFee.toString(),
-        // NEW LOGIC: The reward (prize) is always exactly DOUBLE the registration fee.
-        // For example, if entry is 10, the reward is 20.
         reward: entryFee * 2
       };
     });
@@ -86,7 +81,7 @@ export const joinLevel = async (req: Request, res: Response) => {
 
     // Fallback solely to support tests directly hitting controller
     if (!userId) {
-       userId = await getUserId(req.body.userId);
+      userId = await getUserId(req.body.userId);
     }
 
     if (!poolId || !userId) return res.status(400).json({ error: "Could not identify user or pool" });
@@ -156,7 +151,6 @@ export const joinLevel = async (req: Request, res: Response) => {
       }
 
       // NEW LOGIC: Every level requires the same fixed registration fee.
-      // We use the base entry fee from the game configuration without multiplying by the level.
       const entryFee = Number(pool.game.entryFee);
 
       const [wallet] = await tx.select().from(wallets).where(eq(wallets.userId, userId));
@@ -192,23 +186,38 @@ export const joinLevel = async (req: Request, res: Response) => {
 };
 
 // GET /api/levels/my-entries
+// ✅ Returns ALL entries for this user across ALL level games
+// ✅ No levelGameId filter — every join history shows up
+// ✅ Includes live pool status + player count for real-time display
 export const getMyEntries = async (req: Request, res: Response) => {
   try {
-    const userId = await getUserId(req.query.userId);
+    // ✅ protect middleware guarantees req.user.id is always set
+    const user = (req as any).user;
+    let userId = user?.id;
+
+    // Fallback for direct test calls without middleware
+    if (!userId) userId = await getUserId(req.query.userId as string);
     if (!userId) return res.status(400).json({ error: "Could not identify user" });
 
+    // ✅ Only filter: current user — no game filter at all
     const entries = await db.select({
-      id: levelEntries.id,
-      level: levelEntries.level,
-      amount: levelEntries.amountPaid,
-      createdAt: levelEntries.createdAt,
-      status: levelEntries.status,
-      gameName: gameTypes.name
+      id:           levelEntries.id,
+      level:        levelEntries.level,
+      amount:       levelEntries.amountPaid,
+      createdAt:    levelEntries.createdAt,
+      status:       levelEntries.status,
+      gameName:     gameTypes.name,
+      gameTypeId:   levelEntries.gameTypeId,
+      // Live pool data for real-time status display
+      poolStatus:   levelPools.status,
+      currentCount: levelPools.currentCount,
+      requiredCount: levelPools.requiredCount,
     })
       .from(levelEntries)
       .innerJoin(gameTypes, eq(levelEntries.gameTypeId, gameTypes.id))
+      .leftJoin(levelPools, eq(levelEntries.poolId, levelPools.id))
       .where(eq(levelEntries.userId, userId))
-      .orderBy(desc(levelEntries.createdAt));
+      .orderBy(desc(levelEntries.createdAt)); // Latest first
 
     res.json(entries);
   } catch (error) {
@@ -351,7 +360,6 @@ export const getAdminLevels = async (req: Request, res: Response) => {
 
     const formatted = pools.map(p => ({
       ...p,
-      // NEW LOGIC: Administrative view also reflects the fixed reward (double the registration fee).
       reward: Number(p.entryFee) * 2
     }));
 
@@ -367,7 +375,6 @@ export const createAdminLevel = async (req: Request, res: Response) => {
   try {
     const { gameTypeId, level, requiredCount } = req.body;
 
-    // Insert into DB
     const [result] = await db.insert(levelPools).values({
       gameTypeId: Number(gameTypeId),
       level: Number(level),
