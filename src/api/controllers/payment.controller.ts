@@ -4,6 +4,7 @@ import { transactions, wallets, tickets, paymentOrders, users, paymentMethods } 
 import { sql, eq, and, desc } from "drizzle-orm";
 import Razorpay from "razorpay";
 import crypto from "crypto";
+import { sendPaymentFailureEmail, sendTicketPurchaseEmail } from "../../utils/sendEmail";
 
 // Initialize Razorpay
 const razorpay = new Razorpay({
@@ -113,6 +114,12 @@ export const verifyRazorpayPayment = async (req: any, res: Response) => {
 
     if (expectedSignature !== receivedSig) {
       console.error("[verify] Signature mismatch for order:", orderId);
+      
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (user) {
+        await sendPaymentFailureEmail(user.email, user.name);
+      }
+      
       return res.status(400).json({ error: "Invalid payment signature" });
     }
 
@@ -180,6 +187,11 @@ export const verifyRazorpayPayment = async (req: any, res: Response) => {
           }
         } else {
           console.log(`[Verify Success] PURCHASE: Ticket(s) issued for Draw ${drawId}. No wallet credit needed.`);
+          
+          const [user] = await tx.select().from(users).where(eq(users.id, userId));
+          if (user) {
+            await sendTicketPurchaseEmail(user.email, user.name, drawId, pickedNumbers || ticketNumber);
+          }
         }
       });
 
@@ -198,6 +210,15 @@ export const verifyRazorpayPayment = async (req: any, res: Response) => {
     }
   } catch (error) {
     console.error("Payment Verification Error:", error);
+
+    const userId = req.user?.id;
+    if (userId) {
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (user) {
+        await sendPaymentFailureEmail(user.email, user.name);
+      }
+    }
+
     res.status(500).json({ error: "Internal server error during verification" });
   }
 };

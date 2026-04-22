@@ -2,6 +2,7 @@ import { db } from "../../db";
 import { wallets, users, transactions, tickets } from "../../db/schema";
 import { eq, desc } from "drizzle-orm";
 import { Request, Response } from "express";
+import { sendTicketPurchaseEmail, sendPaymentFailureEmail } from "../../utils/sendEmail";
 import { AuthRequest } from "../middleware/auth.middleware";
 import crypto from "crypto";
 
@@ -153,65 +154,116 @@ export const payWithWallet = async (req: AuthRequest, res: Response) => {
   const { drawId, ticketNumbers, totalAmount } = req.body;
   const userId = req.user?.id;
 
+  // ✅ VALIDATION
   if (!userId) {
-    return res.status(401).json({ success: false, message: "Unauthorized" });
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized",
+    });
+  }
+
+  if (!drawId || !ticketNumbers || !totalAmount) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing required fields",
+    });
+  }
+
+  const [user] = await db.select().from(users).where(eq(users.id, userId));
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      message: "User not found",
+    });
   }
 
   try {
     await db.transaction(async (tx) => {
-      // 1. Get Wallet
+      // ✅ 1. GET USER WALLET
       const [userWallet] = await tx
         .select()
         .from(wallets)
         .where(eq(wallets.userId, userId));
 
       if (!userWallet) {
-        throw new Error("Wallet not found. Please try again.");
+        throw new Error("Wallet not found");
       }
 
       const balance = Number(userWallet.balance);
-      if (balance < totalAmount) {
-        throw new Error(`Insufficient balance. Available: ₹${balance}, Required: ₹${totalAmount}`);
+      const amount = Number(totalAmount);
+
+      if (balance < amount) {
+        throw new Error(
+          `Insufficient balance. Available ₹${balance}, Required ₹${amount}`
+        );
       }
 
-      // 2. Deduct Balance
-      const newBalance = balance - totalAmount;
+      // ✅ 2. DEDUCT BALANCE
+      const newBalance = balance - amount;
+
       await tx
         .update(wallets)
-        .set({ balance: newBalance.toFixed(2), updatedAt: new Date() })
+        .set({
+          balance: newBalance.toFixed(2),
+          updatedAt: new Date(),
+        })
         .where(eq(wallets.id, userWallet.id));
 
-      // 3. Create Tickets
-      // ticketNumbers is a comma-separated string from frontend
-      const ticketNumbersArray = ticketNumbers.split(",").map((s: string) => s.trim());
-      const singleTicketPrice = totalAmount / ticketNumbersArray.length;
+      // ✅ 3. CREATE SINGLE TICKET (IMPORTANT FIX 🔥)
+      const cleanedNumbers = ticketNumbers
+        .split(",")
+        .map((n: string) => n.trim())
+        .filter((n: string) => n !== "");
 
-      for (const num of ticketNumbersArray) {
-        await tx.insert(tickets).values({
-          userId,
-          drawId,
-          ticketNumber: num,
-          pricePaid: singleTicketPrice.toFixed(2),
-          pickedNumbers: num,
-          status: "active",
-        });
+      if (cleanedNumbers.length === 0) {
+        throw new Error("No numbers selected");
       }
 
-      // 4. Log Transaction
+      await tx.insert(tickets).values({
+        userId,
+        drawId,
+
+        // ✅ Better unique ticket number
+        ticketNumber: `TKT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+
+        // ✅ Full amount (not split)
+        pricePaid: amount.toFixed(2),
+
+        // ✅ ALL numbers stored together
+        pickedNumbers: cleanedNumbers.join(","),
+
+        isAutoPick: false,
+        status: "active",
+      });
+
+      // ✅ 4. LOG TRANSACTION
       await tx.insert(transactions).values({
         userId,
         walletId: userWallet.id,
-        txnRef: `WLT-${crypto.randomBytes(8).toString("hex").toUpperCase()}`,
-        amount: totalAmount.toFixed(2),
+        txnRef: `WLT-${crypto.randomBytes(6).toString("hex").toUpperCase()}`,
+        amount: amount.toFixed(2),
         type: "ticket_purchase",
         status: "success",
-        note: `Wallet Purchase: Draw ${drawId}`,
+        note: `Wallet Purchase for Draw ${drawId}`,
       });
     });
 
-    res.json({ success: true, message: "Tickets purchased successfully via wallet!" });
+    const cleanedNumbers = ticketNumbers.split(",").map((n: string) => n.trim()).filter((n: string) => n !== "");
+    await sendTicketPurchaseEmail(user.email, user.name, drawId, cleanedNumbers.join(", "));
+
+    return res.json({
+      success: true,
+      message: "✅ Ticket created successfully",
+    });
+
   } catch (error: any) {
-    console.error("Wallet Pay Error:", error.message);
-    res.status(400).json({ success: false, message: error.message || "Payment failed" });
+    console.error("Wallet Pay Error:", error);
+    
+    await sendPaymentFailureEmail(user.email, user.name);
+
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Payment failed",
+    });
   }
 };

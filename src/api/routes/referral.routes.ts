@@ -1,6 +1,6 @@
 import express from "express";
 import { generateReferral } from "../controllers/referral.controller";
-import { protect } from "../middleware/auth.middleware";
+import { protect } from "../middleware/user.middleware"
 
 const router = express.Router();
 
