@@ -26,7 +26,6 @@ const router = Router();
  *     summary: Return all level games
  *     tags: [Level Game]
  */
-
 router.get("/level-games", getLevelGames);
 
 /**
@@ -51,12 +50,11 @@ router.post("/levels/join", protect, joinLevel);
  * @swagger
  * /api/levels/my-entries:
  *   get:
- *     summary: Return user entries
+ *     summary: Return ALL entries for logged-in user across all level games
  *     tags: [Level Game]
  */
-router.get("/levels/my-entries", getMyEntries);
-
-// Wallet routes removed from level.routes.ts (these are handled in wallet.routes.ts)
+// ✅ protect added — req.user.id correctly set, no fallback needed
+router.get("/levels/my-entries", protect, getMyEntries);
 
 /* ================= ADMIN ROUTES ================= */
 
@@ -85,7 +83,6 @@ router.post("/admin/level-games", createLevelGame);
  *     summary: Get level game statistics
  *     tags: [Admin Level Game]
  */
-
 router.get("/admin/level-games/stats", getAdminStats);
 
 /**
