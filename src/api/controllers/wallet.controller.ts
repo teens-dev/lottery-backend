@@ -2,6 +2,7 @@ import { db } from "../../db";
 import { wallets, users, transactions, tickets } from "../../db/schema";
 import { eq, desc } from "drizzle-orm";
 import { Request, Response } from "express";
+import { sendTicketPurchaseEmail, sendPaymentFailureEmail } from "../../utils/sendEmail";
 import { AuthRequest } from "../middleware/auth.middleware";
 import crypto from "crypto";
 
@@ -168,6 +169,14 @@ export const payWithWallet = async (req: AuthRequest, res: Response) => {
     });
   }
 
+  const [user] = await db.select().from(users).where(eq(users.id, userId));
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      message: "User not found",
+    });
+  }
+
   try {
     await db.transaction(async (tx) => {
       // ✅ 1. GET USER WALLET
@@ -239,6 +248,9 @@ export const payWithWallet = async (req: AuthRequest, res: Response) => {
       });
     });
 
+    const cleanedNumbers = ticketNumbers.split(",").map((n: string) => n.trim()).filter((n: string) => n !== "");
+    await sendTicketPurchaseEmail(user.email, user.name, drawId, cleanedNumbers.join(", "));
+
     return res.json({
       success: true,
       message: "✅ Ticket created successfully",
@@ -246,6 +258,8 @@ export const payWithWallet = async (req: AuthRequest, res: Response) => {
 
   } catch (error: any) {
     console.error("Wallet Pay Error:", error);
+    
+    await sendPaymentFailureEmail(user.email, user.name);
 
     return res.status(400).json({
       success: false,
