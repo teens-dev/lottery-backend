@@ -79,6 +79,42 @@ export const getTickets = async (req: Request, res: Response) => {
     });
   }
 };
+// ✅ GET MY TICKETS (User-specific)
+export const getMyTickets = async (req: any, res: Response) => {
+  try {
+    const userId = req.user.id;
+
+    const data = await db
+      .select({
+        id: tickets.id,
+        ticket_number: tickets.ticketNumber,
+        user_id: tickets.userId,
+        draw_id: tickets.drawId,
+        price_paid: tickets.pricePaid,
+        picked_numbers: tickets.pickedNumbers,
+        is_auto_pick: tickets.isAutoPick,
+        status: tickets.status,
+        is_winner: tickets.isWinner,
+        purchased_at: tickets.purchasedAt,
+      })
+      .from(tickets)
+      .where(eq(tickets.userId, userId))
+      .orderBy(desc(tickets.purchasedAt));
+
+    return res.json({
+      success: true,
+      count: data.length,
+      data,
+    });
+
+  } catch (error) {
+    console.error("MY TICKETS ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch user tickets",
+    });
+  }
+};
 
 // ✅ COUNT API (for dashboard)
 export const getTicketCount = async (_req: Request, res: Response) => {
@@ -96,5 +132,37 @@ export const getTicketCount = async (_req: Request, res: Response) => {
       success: false,
       message: "Failed to fetch count",
     });
+  }
+};
+
+
+export const getBookedNumbersForDraw = async (req: Request, res: Response) => {
+  try {
+    const { drawId } = req.params;
+
+    if (!drawId || Array.isArray(drawId)) {
+      return res.status(400).json({ success: false, message: "Invalid drawId" });
+    }
+
+    const result = await db
+      .select({ pickedNumbers: tickets.pickedNumbers })
+      .from(tickets)
+      .where(eq(tickets.drawId, drawId));
+
+    const bookedNumbers: number[] = [];
+    result.forEach(row => {
+      if (row.pickedNumbers) {
+        row.pickedNumbers.split(',').forEach(n => {
+          const num = parseInt(n.trim(), 10);
+          if (!isNaN(num)) bookedNumbers.push(num);
+        });
+      }
+    });
+
+    const unique = [...new Set(bookedNumbers)];
+    return res.json({ success: true, bookedNumbers: unique });
+  } catch (error) {
+    console.error("GET BOOKED NUMBERS ERROR:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch booked numbers" });
   }
 };
