@@ -319,20 +319,19 @@ export const getPaymentStats = async (req: Request, res: Response) => {
 export const getAdminTransactions = async (req: Request, res: Response) => {
   try {
     // 1. Fetch transactions with user name and payment method name
-    const data = await db
-      .select({
-        id: transactions.id,
-        userName: users.name,
-        amount: transactions.amount,
-        type: transactions.type,
-        status: transactions.status,
-        method: paymentMethods.name,
-        datetime: transactions.createdAt,
-      })
-      .from(transactions)
-      .leftJoin(users, eq(transactions.userId, users.id))
-      .leftJoin(paymentMethods, eq(transactions.methodId, paymentMethods.id))
-      .orderBy(desc(transactions.createdAt));
+const data = await db
+  .select({
+    id: transactions.id,
+    userName: users.name,
+    amount: transactions.amount,
+    type: transactions.type,
+    status: transactions.status,
+    method: transactions.note,
+    datetime: transactions.createdAt,
+  })
+  .from(transactions)
+  .leftJoin(users, eq(transactions.userId, users.id))
+  .orderBy(desc(transactions.createdAt));
 
     // 2. Mapping enums to human-readable strings as requested
     const typeMapping: Record<string, string> = {
