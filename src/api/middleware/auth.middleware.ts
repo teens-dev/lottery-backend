@@ -10,17 +10,33 @@ export const protect = (
   res: Response,
   next: NextFunction
 ) => {
-  // ✅ User token takes priority. Fall back to admin_token only if no user token exists.
-  // WHY: The browser sends BOTH cookies simultaneously. If admin_token is checked first,
-  // the user payment flow gets authenticated as admin (which has no walletId),
-  // breaking signature verification and wallet lookups.
-  const token = req.cookies?.token || req.cookies?.admin_token;
+  /*
+    PRIORITY FIX:
 
-  if (!req.cookies?.token && req.cookies?.admin_token) {
-    console.log("[Auth] Admin token used (no user token present)");
-  } else if (req.cookies?.token) {
-    console.log("[Auth] User token used");
-  }
+    For admin pages like:
+    /api/payments/stats
+    /api/payments/transactions
+
+    browser may send BOTH:
+    token
+    admin_token
+
+    If normal user token is picked first,
+    adminOnly middleware fails with 403.
+
+    So:
+    - admin routes use admin_token first
+    - normal routes use user token first
+  */
+
+  const isAdminRoute =
+    req.originalUrl.includes("/api/admin") ||
+    req.originalUrl.includes("/api/payments/stats") ||
+    req.originalUrl.includes("/api/payments/transactions");
+
+  const token = isAdminRoute
+    ? req.cookies?.admin_token || req.cookies?.token
+    : req.cookies?.token || req.cookies?.admin_token;
 
   if (!token) {
     return res.status(401).json({
@@ -36,6 +52,11 @@ export const protect = (
     );
 
     req.user = decoded;
+
+    console.log(
+      `[Auth] ${isAdminRoute ? "Admin" : "User"} route authenticated`
+    );
+
     next();
   } catch {
     return res.status(401).json({
