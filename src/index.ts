@@ -30,14 +30,14 @@ app.use(
     credentials: true,
   })
 );
-// ✅ Parse JSON globally, but crucially preserve the raw unparsed Buffer as 'req.rawBody'.
-// This completely guarantees Razorpay Webhook Signatures mathematically match!
+
 app.use(express.json({
   verify: (req: any, res, buf) => {
     req.rawBody = buf;
   }
 }));
-app.use(cookieParser());   // ✅ IMPORTANT FIX
+
+app.use(cookieParser());
 
 // Swagger
 const swaggerOptions = {
@@ -46,12 +46,9 @@ const swaggerOptions = {
     info: {
       title: "Lottery Backend API",
       version: "1.0.0",
-      description: "API Documentation for the Lottery Backend",
     },
     servers: [
-      {
-        url: "http://localhost:10000",
-      },
+      { url: "http://localhost:10000" }
     ],
   },
   apis: ["./src/api/routes/*.ts", "./src/api/controllers/*.ts"],
@@ -61,14 +58,11 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-
 app.get("/", (req, res) => {
   res.send("API is running 🚀");
 });
 
-
-// ✅ ROUTES (ORDER IMPORTANT)
-
+// ROUTES
 app.use("/api/users", userRoutes);
 app.use("/api/revenue", revenueRoutes);
 
@@ -81,9 +75,8 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/referral", referralRoutes);
 app.use("/api/tickets", ticketRoutes);
 
-// ✅ WALLET ROUTES
-app.use("/api/wallet", walletRoutes);
-
+// ✅ FIXED WALLET ROUTES
+app.use("/api", walletRoutes);   // 🔥 CHANGE HERE
 
 const PORT = process.env.PORT || 10000;
 

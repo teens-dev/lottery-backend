@@ -1,11 +1,9 @@
 import { db } from "../../db";
-import { wallets, users, transactions, tickets } from "../../db/schema";
-import { eq, desc } from "drizzle-orm";
+import { wallets, users, transactions } from "../../db/schema";
+import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { Request, Response } from "express";
-import { AuthRequest } from "../middleware/auth.middleware";
-import crypto from "crypto";
 
-// ✅ GET ALL WALLETS (ADMIN)
+// ✅ ADMIN - ALL WALLETS
 export const getAllWallets = async (req: Request, res: Response) => {
   try {
     const data = await db
@@ -21,109 +19,80 @@ export const getAllWallets = async (req: Request, res: Response) => {
       .from(wallets)
       .leftJoin(users, eq(wallets.userId, users.id));
 
-    if (!data || data.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "No wallets found",
-      });
-    }
-
     const totalBalance = data.reduce(
       (sum, w: any) => sum + Number(w.balance || 0),
       0
     );
 
-    const averageBalance = Math.floor(totalBalance / data.length);
+    const averageBalance =
+      data.length > 0 ? totalBalance / data.length : 0;
 
-    const transactionsToday = data.length;
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
 
-    const lockedPrizes = data.reduce(
-      (sum, w: any) => sum + Number(w.locked || 0),
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const todayTransactions = await db
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          gte(transactions.createdAt, startOfDay),
+          lte(transactions.createdAt, endOfDay)
+        )
+      );
+
+    const transactionsToday = todayTransactions.length;
+
+    const todayBalance = todayTransactions.reduce(
+      (sum: number, txn: any) =>
+        txn.type === "Deposit"
+          ? sum + Number(txn.amount || 0)
+          : sum,
       0
     );
 
     res.json({
       success: true,
-      totalBalance,
-      averageBalance,
+      totalBalance: Number(totalBalance.toFixed(2)),
+      averageBalance: Number(averageBalance.toFixed(2)),
       transactionsToday,
-      lockedPrizes,
+      todayBalance: Number(todayBalance.toFixed(2)),
       wallets: data,
     });
-  } catch (error) {
-    console.error("Wallet Fetch Error:", error);
 
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch wallets",
-    });
+  } catch (error) {
+    console.error("Wallet API Error:", error);
+    res.status(500).json({ success: false });
   }
 };
 
 
-// ✅ GET USER WALLET
-export const getUserWallet = async (
-  req: AuthRequest,
-  res: Response
-) => {
+// ✅ USER WALLET
+export const getUserWallet = async (req: any, res: Response) => {
   try {
-    // 1. Disable Aggressive Browser Caching (Fixes 304 Not Modified issue during polling)
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    const userId = req.user?.id;
 
-    // Priority: Query param (for polling support) or Auth token
-    const userId = (req.query.userId as string) || req.user?.id;
-
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: "Not authorized",
-        message: "User ID missing"
-      });
-    }
-
-    let wallet = await db
+    const wallet = await db
       .select()
       .from(wallets)
       .where(eq(wallets.userId, userId))
       .limit(1);
 
-    // 2. RESILIENT PROVISIONING: Create wallet if missing (legacy users or broken registrations)
-    if (!wallet.length) {
-      console.log(`[Wallet] Provisioning missing wallet row on-demand for user ${userId}`);
-      const [newWallet] = await db
-        .insert(wallets)
-        .values({
-          userId: userId,
-          balance: "0.00",
-          lockedAmount: "0.00",
-        })
-        .returning();
-      wallet = [newWallet];
-    }
-
     res.json({
       success: true,
-      available: Number(wallet[0].balance),
-      locked: Number(wallet[0].lockedAmount),
+      wallet: wallet[0],
     });
 
   } catch (error) {
-    console.error("User Wallet Error:", error);
-
-    res.status(500).json({
-      success: false,
-      error: "Internal server error",
-      message: "Failed to fetch wallet",
-    });
+    res.status(500).json({ success: false });
   }
 };
 
 
-// ✅ GET USER TRANSACTIONS
-export const getUserTransactions = async (
-  req: AuthRequest,
-  res: Response
-) => {
+// ✅ USER TRANSACTIONS
+export const getUserTransactions = async (req: any, res: Response) => {
   try {
     const userId = req.user?.id;
 
@@ -139,79 +108,50 @@ export const getUserTransactions = async (
     });
 
   } catch (error) {
-    console.error("Transactions Error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch transactions",
-    });
+    res.status(500).json({ success: false });
   }
 };
 
-// ✅ PAY WITH WALLET (Unified Flow)
-export const payWithWallet = async (req: AuthRequest, res: Response) => {
-  const { drawId, ticketNumbers, totalAmount } = req.body;
-  const userId = req.user?.id;
 
-  if (!userId) {
-    return res.status(401).json({ success: false, message: "Unauthorized" });
-  }
-
+// ✅ PAY WITH WALLET (SIMPLE)
+export const payWithWallet = async (req: any, res: Response) => {
   try {
-    await db.transaction(async (tx) => {
-      // 1. Get Wallet
-      const [userWallet] = await tx
-        .select()
-        .from(wallets)
-        .where(eq(wallets.userId, userId));
+    const { amount } = req.body;
+    const userId = req.user?.id;
 
-      if (!userWallet) {
-        throw new Error("Wallet not found. Please try again.");
-      }
+    const [wallet] = await db
+      .select()
+      .from(wallets)
+      .where(eq(wallets.userId, userId));
 
-      const balance = Number(userWallet.balance);
-      if (balance < totalAmount) {
-        throw new Error(`Insufficient balance. Available: ₹${balance}, Required: ₹${totalAmount}`);
-      }
+    if (!wallet) {
+      return res.status(400).json({ message: "Wallet not found" });
+    }
 
-      // 2. Deduct Balance
-      const newBalance = balance - totalAmount;
-      await tx
-        .update(wallets)
-        .set({ balance: newBalance.toFixed(2), updatedAt: new Date() })
-        .where(eq(wallets.id, userWallet.id));
+    const balance = Number(wallet.balance);
 
-      // 3. Create Tickets
-      // ticketNumbers is a comma-separated string from frontend
-      const ticketNumbersArray = ticketNumbers.split(",").map((s: string) => s.trim());
-      const singleTicketPrice = totalAmount / ticketNumbersArray.length;
+    if (balance < amount) {
+      return res.status(400).json({ message: "Insufficient balance" });
+    }
 
-      for (const num of ticketNumbersArray) {
-        await tx.insert(tickets).values({
-          userId,
-          drawId,
-          ticketNumber: num,
-          pricePaid: singleTicketPrice.toFixed(2),
-          pickedNumbers: num,
-          status: "active",
-        });
-      }
+    const newBalance = balance - amount;
 
-      // 4. Log Transaction
-      await tx.insert(transactions).values({
-        userId,
-        walletId: userWallet.id,
-        txnRef: `WLT-${crypto.randomBytes(8).toString("hex").toUpperCase()}`,
-        amount: totalAmount.toFixed(2),
-        type: "ticket_purchase",
-        status: "success",
-        note: `Wallet Purchase: Draw ${drawId}`,
-      });
-    });
+    await db
+      .update(wallets)
+      .set({ balance: newBalance.toFixed(2) })
+      .where(eq(wallets.userId, userId));
 
-    res.json({ success: true, message: "Tickets purchased successfully via wallet!" });
-  } catch (error: any) {
-    console.error("Wallet Pay Error:", error.message);
-    res.status(400).json({ success: false, message: error.message || "Payment failed" });
+    await db.insert(transactions).values({
+  userId,
+  walletId: wallet.id, // ✅ REQUIRED
+  txnRef: `TXN-${Date.now()}`, // ✅ UNIQUE REF
+  amount: amount.toFixed(2),
+  type: "withdrawal", // ✅ correct enum
+  status: "success",
+  note: "Wallet debit",
+}); res.json({ success: true });
+
+  } catch (error) {
+    res.status(500).json({ success: false });
   }
 };
