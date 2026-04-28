@@ -13,7 +13,7 @@ export const getTickets = async (req: Request, res: Response) => {
       user_id,
       draw_id,
       page = "1",
-      limit = "10",
+      limit = "1000",
     } = req.query;
 
     const pageNum = Number(page);
@@ -54,6 +54,7 @@ export const getTickets = async (req: Request, res: Response) => {
         draw_id: tickets.drawId,
         price_paid: tickets.pricePaid,
         picked_numbers: tickets.pickedNumbers,
+        numbers_array: tickets.pickedNumbers,
         is_auto_pick: tickets.isAutoPick,
         status: tickets.status,
         is_winner: tickets.isWinner,
@@ -61,13 +62,16 @@ export const getTickets = async (req: Request, res: Response) => {
       })
       .from(tickets)
       .where(filters.length ? and(...filters) : undefined)
-      .orderBy(desc(tickets.purchasedAt))
-      .limit(limitNum)
-      .offset(offset);
+      // .orderBy(desc(tickets.purchasedAt))
+      // .limit(limitNum)
+      // .offset(offset);
+      .orderBy(desc(tickets.purchasedAt));
+
+    const total = await db.$count(tickets);
 
     return res.json({
       success: true,
-      count: data.length,
+      count: total,
       data,
     });
 

@@ -304,25 +304,58 @@ export const getAllDraws = async (req: Request, res: Response) => {
   }
 };
 
+// export const getDrawTickets = async (req: Request, res: Response) => {
+//   try {
+//     const drawId = req.params.id as string;
+//     const allTickets = await db.select({
+//       ticketNumber: tickets.ticketNumber,
+//       pickedNumbers: tickets.pickedNumbers,
+//     }).from(tickets).where(eq(tickets.drawId, drawId));
+
+//     const bookedBoxes = allTickets.map(t => t.ticketNumber);
+
+//     res.status(200).json({
+//       success: true,
+//       data: bookedBoxes,
+//       pickedNumbers: allTickets.map(t => t.pickedNumbers).filter(Boolean)
+//     });
+//   } catch (error) {
+//     console.error("Error fetching tickets:", error);
+//     res.status(500).json({ success: false, message: "Error fetching tickets" });
+//   }
+// };
+
 export const getDrawTickets = async (req: Request, res: Response) => {
-  try {
-    const drawId = req.params.id as string;
-    const allTickets = await db.select({
-      ticketNumber: tickets.ticketNumber,
-      pickedNumbers: tickets.pickedNumbers,
-    }).from(tickets).where(eq(tickets.drawId, drawId));
+  try {
+    const drawId = req.params.id as string;
 
-    const bookedBoxes = allTickets.map(t => t.ticketNumber);
+    const allTickets = await db
+      .select({
+        pickedNumbers: tickets.pickedNumbers,
+      })
+      .from(tickets)
+      .where(eq(tickets.drawId, drawId));
 
-    res.status(200).json({
-      success: true,
-      data: bookedBoxes,
-      pickedNumbers: allTickets.map(t => t.pickedNumbers).filter(Boolean)
-    });
-  } catch (error) {
-    console.error("Error fetching tickets:", error);
-    res.status(500).json({ success: false, message: "Error fetching tickets" });
-  }
+    // :fire: Convert ["1,2,3", "37,38,39"] → [1,2,3,37,38,39]
+    const bookedNumbers = allTickets.flatMap((t) =>
+      (t.pickedNumbers || "")
+        .split(",")
+        .map((n) => parseInt(n.trim(), 10))
+        .filter((n) => !isNaN(n))
+    );
+
+    // remove duplicates
+    const uniqueNumbers = Array.from(new Set(bookedNumbers));
+
+    res.json({
+      success: true,
+      bookedNumbers: uniqueNumbers, // :white_check_mark: THIS is key
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false });
+  }
 };
 
 // POST /api/draw-results — Admin declares result by selecting winning ticket numbers

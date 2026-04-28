@@ -148,6 +148,7 @@ export const getUserTransactions = async (
   }
 };
 
+
 // ✅ PAY WITH WALLET (Unified Flow)
 export const payWithWallet = async (req: AuthRequest, res: Response) => {
   const { drawId, ticketNumbers, totalAmount } = req.body;
@@ -159,59 +160,81 @@ export const payWithWallet = async (req: AuthRequest, res: Response) => {
 
   try {
     await db.transaction(async (tx) => {
-      // 1. Get Wallet
-      const [userWallet] = await tx
-        .select()
-        .from(wallets)
-        .where(eq(wallets.userId, userId));
 
-      if (!userWallet) {
-        throw new Error("Wallet not found. Please try again.");
-      }
+  // 1️⃣ Get Wallet
+  const [userWallet] = await tx
+    .select()
+    .from(wallets)
+    .where(eq(wallets.userId, userId));
 
-      const balance = Number(userWallet.balance);
-      if (balance < totalAmount) {
-        throw new Error(`Insufficient balance. Available: ₹${balance}, Required: ₹${totalAmount}`);
-      }
+  const balance = Number(userWallet.balance);
 
-      // 2. Deduct Balance
-      const newBalance = balance - totalAmount;
-      await tx
-        .update(wallets)
-        .set({ balance: newBalance.toFixed(2), updatedAt: new Date() })
-        .where(eq(wallets.id, userWallet.id));
+  if (balance < totalAmount) {
+    throw new Error("Insufficient balance");
+  }
 
-      // 3. Create Tickets
-      // ticketNumbers is a comma-separated string from frontend
-      const ticketNumbersArray = ticketNumbers.split(",").map((s: string) => s.trim());
-      const singleTicketPrice = totalAmount / ticketNumbersArray.length;
+  // 2️⃣ Deduct Balance
+  const newBalance = balance - totalAmount;
 
-      for (const num of ticketNumbersArray) {
-        await tx.insert(tickets).values({
-          userId,
-          drawId,
-          ticketNumber: num,
-          pricePaid: singleTicketPrice.toFixed(2),
-          pickedNumbers: num,
-          status: "active",
-        });
-      }
+  await tx.update(wallets)
+    .set({ balance: newBalance.toFixed(2), updatedAt: new Date() })
+    .where(eq(wallets.id, userWallet.id));
 
-      // 4. Log Transaction
-      await tx.insert(transactions).values({
-        userId,
-        walletId: userWallet.id,
-        txnRef: `WLT-${crypto.randomBytes(8).toString("hex").toUpperCase()}`,
-        amount: totalAmount.toFixed(2),
-        type: "ticket_purchase",
-        status: "success",
-        note: `Wallet Purchase: Draw ${drawId}`,
-      });
+
+const year = new Date().getFullYear();
+
+// get next ticket number from postgres sequence
+// const seqResult = await tx.execute(
+//   `SELECT nextval('ticket_number_seq') as seq`
+// );
+
+// const seq = seqResult.rows[0].seq;
+
+// const ticketGroupNumber =
+//   `TKT-${year}-${String(seq).padStart(6, "0")}`;
+
+
+  // 3️⃣ Prepare numbers
+  const ticketNumbersArray = ticketNumbers.split(",").map((n: string) => n.trim());
+  const pickedNumbersString = ticketNumbersArray.join(",");
+
+
+
+  // 4️⃣ Insert Ticket
+  await tx.insert(tickets).values({
+    userId,
+    drawId,
+    // ticketNumber: ticketGroupNumber,
+    pricePaid: totalAmount.toFixed(2),
+    pickedNumbers: pickedNumbersString,
+    isAutoPick: false,
+    status: "active",
+  });
+
+
+
+  // 5️⃣ Log Transaction
+  await tx.insert(transactions).values({
+    userId,
+    walletId: userWallet.id,
+    txnRef: `WLT-${crypto.randomBytes(8).toString("hex").toUpperCase()}`,
+    amount: totalAmount.toFixed(2),
+    type: "ticket_purchase",
+    status: "success",
+    note: `Wallet Purchase: Draw ${drawId}`,
+  });
     });
 
-    res.json({ success: true, message: "Tickets purchased successfully via wallet!" });
-  } catch (error: any) {
-    console.error("Wallet Pay Error:", error.message);
-    res.status(400).json({ success: false, message: error.message || "Payment failed" });
+    res.json({
+      success: true,
+      message: "Ticket purchased successfully",
+    });
+  } catch (error) {
+    console.error("Payment Error:", error);
+
+    res.status(400).json({
+      success: false,
+      message: error instanceof Error ? error.message : "Payment failed",
+    });
   }
 };

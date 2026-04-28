@@ -8,6 +8,7 @@ import {
   kycDocumentTypes, notificationTemplates, adminRoles
 } from './independent';
 
+
 // ── Enums ──
 export const userStatusEnum = pgEnum('user_status', [
   'active', 'suspended', 'banned', 'pending_verification'
