@@ -1,6 +1,6 @@
 import {
   pgTable, uuid, integer, varchar, text,
-  boolean, numeric, timestamp, pgEnum, index
+  boolean, numeric, timestamp, pgEnum, index, uniqueIndex
 } from 'drizzle-orm/pg-core';
 import { users, admins, draws, wallets,
   kycSubmissions, notificationCampaigns } from './core';
@@ -32,7 +32,7 @@ export const tickets = pgTable('tickets', {
   id:             uuid('id').primaryKey().defaultRandom(),
   userId:         uuid('user_id').references(() => users.id).notNull(),
   drawId:         uuid('draw_id').references(() => draws.id).notNull(),
-  ticketNumber:   varchar('ticket_number', { length: 50 }).notNull().unique(),
+  ticketNumber:   varchar('ticket_number', { length: 50 }).notNull(),
   pricePaid:      numeric('price_paid', { precision: 10, scale: 2 }).notNull(),
   pickedNumbers:  varchar('picked_numbers', { length: 200 }),
   isAutoPick:     boolean('is_auto_pick').notNull().default(false),
@@ -43,6 +43,7 @@ export const tickets = pgTable('tickets', {
   userDrawIdx:    index('tickets_user_draw_idx').on(t.userId, t.drawId),
   drawIdx:        index('tickets_draw_idx').on(t.drawId),
   ticketNumIdx:   index('tickets_number_idx').on(t.ticketNumber),
+  drawTicketUnq:  uniqueIndex('tickets_user_draw_ticket_idx').on(t.drawId, t.ticketNumber),
 }));
 
 // ── 23. transactions ──
