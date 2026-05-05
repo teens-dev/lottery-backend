@@ -373,3 +373,37 @@ export const logout = async (
   });
 
 };
+//1//
+export const getAllUsers = async (
+  req: ExpressRequest,
+  res: ExpressResponse
+) => {
+  try {
+
+    const allUsers = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        createdAt: users.createdAt
+      })
+      .from(users);
+
+    return res.json({
+      success: true,
+      count: allUsers.length,
+      users: allUsers
+    });
+
+  } catch (error) {
+
+    console.error("GET ALL USERS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch users"
+    });
+
+  }
+};
